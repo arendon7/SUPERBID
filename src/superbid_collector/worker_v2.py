@@ -9,6 +9,7 @@ from .storage import Store
 from .discovery import discover_from_source, sources
 from .network_capture import capture_public_json
 from .direct_public_api import capture_direct_public
+from .direct_discovery import discover_open_vehicles_direct, PUBLIC_OFFERS_ENDPOINT
 from .operations import due_lots, mark_queue_result, start_run, finish_run
 
 DB = os.getenv("SUPERBID_DB", "superbid.db")
@@ -17,10 +18,11 @@ IDLE_SECONDS = int(os.getenv("SUPERBID_IDLE_SECONDS", "30"))
 CAPTURE_SECONDS = int(os.getenv("SUPERBID_CAPTURE_SECONDS", "12"))
 QUEUE_BATCH = int(os.getenv("SUPERBID_QUEUE_BATCH", "20"))
 DIRECT_HTTP_ENABLED = os.getenv("SUPERBID_DIRECT_HTTP_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+DIRECT_DISCOVERY_ENABLED = os.getenv("SUPERBID_DIRECT_DISCOVERY_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+BROWSER_DISCOVERY_ALWAYS = os.getenv("SUPERBID_BROWSER_DISCOVERY_ALWAYS", "0").strip().lower() in {"1", "true", "yes"}
 
 
 async def _capture_monitored_lot(url: str, db: str) -> tuple[dict, str]:
-    """Prefer the stateless public HTTP endpoint and fall back to Chromium."""
     direct_error = None
     if DIRECT_HTTP_ENABLED:
         try:
@@ -83,7 +85,7 @@ async def capture_due(store: Store):
     return results
 
 
-async def discovery_cycle(store: Store):
+async def _browser_discovery_sources(store: Store) -> list[dict]:
     out = []
     for src in sources(store):
         try:
@@ -93,10 +95,37 @@ async def discovery_cycle(store: Store):
                 CAPTURE_SECONDS,
                 src.get("source_type") or "listing",
             )
-            out.append({"url": src["url"], "lots": len(r.get("lots_found") or [])})
+            out.append({"mode": "playwright", "url": src["url"], "lots": len(r.get("lots_found") or [])})
         except Exception as exc:
-            out.append({"url": src["url"], "error": str(exc)})
+            out.append({"mode": "playwright", "url": src["url"], "error": str(exc)})
         await asyncio.sleep(3)
+    return out
+
+
+async def discovery_cycle(store: Store):
+    out = []
+    direct_ok = False
+
+    if DIRECT_DISCOVERY_ENABLED:
+        rid = start_run(store.conn, "DISCOVERY_HTTP", PUBLIC_OFFERS_ENDPOINT)
+        try:
+            result = await discover_open_vehicles_direct(store)
+            direct_ok = True
+            finish_run(
+                store.conn,
+                rid,
+                ok=True,
+                lots_found=result.get("vehicle_lots_seen", 0),
+                lots_saved=result.get("saved", 0),
+            )
+            out.append(result)
+        except Exception as exc:
+            finish_run(store.conn, rid, ok=False, error=str(exc))
+            out.append({"mode": "direct_http_discovery", "error": str(exc)})
+
+    if BROWSER_DISCOVERY_ALWAYS or not direct_ok:
+        out.extend(await _browser_discovery_sources(store))
+
     return out
 
 
@@ -108,6 +137,8 @@ def main():
         "worker": "v2_started",
         "db": DB,
         "direct_http_enabled": DIRECT_HTTP_ENABLED,
+        "direct_discovery_enabled": DIRECT_DISCOVERY_ENABLED,
+        "browser_discovery_always": BROWSER_DISCOVERY_ALWAYS,
     }, ensure_ascii=False))
 
     while True:
