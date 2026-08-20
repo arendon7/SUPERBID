@@ -115,7 +115,7 @@ async def discovery_cycle(store: Store):
                 store.conn,
                 rid,
                 ok=True,
-                lots_found=result.get("vehicle_lots_seen", 0),
+                lots_found=result.get("vehicle_auction_lots_seen", 0),
                 lots_saved=result.get("saved", 0),
             )
             out.append(result)
