@@ -1,0 +1,11 @@
+revoke all on table public.auction_lots from anon, authenticated;
+revoke all on table public.auction_snapshots from anon, authenticated;
+revoke all on table public.auction_outcomes from anon, authenticated;
+revoke all on table public.lot_attachments from anon, authenticated;
+revoke all on table public.lot_bid_history from anon, authenticated;
+revoke all on table public.market_comparables from anon, authenticated;
+revoke all on table public.fasecolda_values from anon, authenticated;
+revoke all on table public.app_settings from anon, authenticated;
+revoke all on table public.discovery_sources from anon, authenticated;
+revoke all on table public.collection_queue from anon, authenticated;
+revoke all on table public.collection_runs from anon, authenticated;

@@ -1,0 +1,7 @@
+{
+  "project_id": "bxsfxydhuaqlkfoicbaz",
+  "name": "superbid-deal-intelligence",
+  "region": "sa-east-1",
+  "url": "https://bxsfxydhuaqlkfoicbaz.supabase.co",
+  "security": "RLS enabled on all application tables; anon/authenticated table privileges revoked"
+}

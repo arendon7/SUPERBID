@@ -1,0 +1,12 @@
+FROM mcr.microsoft.com/playwright/python:v1.46.0-jammy
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+ENV SUPERBID_DB=/data/superbid.db
+WORKDIR /app
+COPY pyproject.toml README.md /app/
+COPY src /app/src
+RUN pip install --no-cache-dir -e ".[browser]"
+COPY . /app
+RUN chmod +x /app/scripts/start_all.sh && mkdir -p /data
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.getenv('PORT','8000')+'/health',timeout=4)" || exit 1
+CMD ["/app/scripts/start_all.sh"]

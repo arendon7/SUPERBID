@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: superbid-deal-intelligence
+    runtime: docker
+    dockerfilePath: ./Dockerfile.production
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: superbid-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: SUPERBID_DB
+        value: /data/superbid.db
+      - key: SUPERBID_DISCOVERY_INTERVAL
+        value: "3600"
+      - key: SUPERBID_IDLE_SECONDS
+        value: "30"
+      - key: SUPERBID_CAPTURE_SECONDS
+        value: "12"
+      - key: SUPERBID_QUEUE_BATCH
+        value: "20"
+      - key: SUPERBID_ADMIN_TOKEN
+        generateValue: true
+      - key: SUPERBID_DASHBOARD_TOKEN
+        generateValue: true
+      - key: MELI_ACCESS_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        value: https://bxsfxydhuaqlkfoicbaz.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPERBID_SYNC_INTERVAL
+        value: "300"
+      - key: SUPERBID_DISCOVERY_URLS
+        value: https://www.superbid.com.co/
