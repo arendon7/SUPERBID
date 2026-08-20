@@ -1,0 +1,54 @@
+name: Public Superbid Live Probe
+
+on:
+  pull_request:
+    paths:
+      - "scripts/live_probe_public.py"
+      - "src/superbid_collector/probe_sanitize.py"
+      - ".github/workflows/live-probe.yml"
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Public Superbid lot URL"
+        required: false
+        default: "https://www.superbid.com.co/oferta/mazda-3-mod-2017-placa-2-ubic-acopi-yumbo-cali-4972833"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DEFAULT_PROBE_URL: "https://www.superbid.com.co/oferta/mazda-3-mod-2017-placa-2-ubic-acopi-yumbo-cali-4972833"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[browser]"
+      - run: python -m playwright install --with-deps chromium
+      - name: Run sanitized public probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          TARGET="${{ github.event.inputs.url }}"
+          if [ -z "$TARGET" ]; then TARGET="$DEFAULT_PROBE_URL"; fi
+          python scripts/live_probe_public.py "$TARGET" --seconds 15 --output probe-output/report.json
+      - name: Ensure report exists
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f probe-output/report.json ]; then
+            mkdir -p probe-output
+            printf '{"summary":{"probe_failed_before_report":true}}\n' > probe-output/report.json
+          fi
+      - name: Upload sanitized probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: superbid-public-probe
+          path: probe-output/report.json
+          retention-days: 7
+          if-no-files-found: error
