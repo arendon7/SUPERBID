@@ -22,6 +22,16 @@ services:
         value: "12"
       - key: SUPERBID_QUEUE_BATCH
         value: "20"
+      - key: SUPERBID_DIRECT_HTTP_ENABLED
+        value: "1"
+      - key: SUPERBID_PUBLIC_PORTAL_ID
+        value: "[17]"
+      - key: SUPERBID_PUBLIC_LOCALE
+        value: es_CO
+      - key: SUPERBID_PUBLIC_TIMEZONE
+        value: UTC
+      - key: SUPERBID_PUBLIC_REQUEST_ORIGIN
+        value: marketplace
       - key: SUPERBID_ADMIN_TOKEN
         generateValue: true
       - key: SUPERBID_DASHBOARD_TOKEN
