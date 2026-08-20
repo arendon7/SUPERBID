@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from typing import Any
 
 import httpx
 
@@ -64,6 +63,17 @@ def offer_category_id(offer: dict) -> int | None:
 def is_vehicle_offer(offer: dict, category_ids: set[int] | None = None) -> bool:
     category_ids = category_ids or vehicle_category_ids()
     return offer_category_id(offer) in category_ids
+
+
+def is_auction_offer(offer: dict) -> bool:
+    """Exclude Shopping/direct-sale inventory; this project targets auction bidding."""
+    if offer.get("isShopping") is True or offer.get("shoppingOfferType") is True:
+        return False
+    auction = offer.get("auction") if isinstance(offer.get("auction"), dict) else {}
+    modality = str(auction.get("modalityDesc") or "").strip().lower()
+    if "shopping" in modality or "venta directa" in modality or "direct sale" in modality:
+        return False
+    return True
 
 
 def _slug(text: str) -> str:
@@ -129,7 +139,7 @@ async def discover_open_vehicles_direct(
     if client is None:
         client = httpx.AsyncClient(timeout=30, headers=_headers(), follow_redirects=True)
 
-    pages_scanned = total_seen = vehicle_seen = queued = saved = 0
+    pages_scanned = total_seen = vehicle_seen = shopping_skipped = queued = saved = 0
     total_reported = None
     seen_ids: set[str] = set()
     try:
@@ -146,6 +156,9 @@ async def discover_open_vehicles_direct(
                 if not isinstance(offer, dict) or not looks_like_offer(offer):
                     continue
                 if not is_vehicle_offer(offer, categories):
+                    continue
+                if not is_auction_offer(offer):
+                    shopping_skipped += 1
                     continue
                 external_id = str(offer.get("id"))
                 if external_id in seen_ids:
@@ -167,9 +180,10 @@ async def discover_open_vehicles_direct(
                         "displayed_price_cop": obs.displayed_price_cop is not None,
                         "closes_at_text": obs.closes_at_text is not None,
                         "category_id": offer_category_id(offer),
+                        "auction_only": True,
                     },
                     confidence=0.91,
-                    note="Public opened-offers endpoint without auth, cookies, filter or fieldList.",
+                    note="Public opened-auction endpoint without auth, cookies, filter or fieldList.",
                 )
                 enqueue_lot(store.conn, external_id, url, obs.closes_at_text, priority=100)
                 queued += 1
@@ -185,7 +199,8 @@ async def discover_open_vehicles_direct(
         "pages_scanned": pages_scanned,
         "total_reported": total_reported,
         "offers_seen": total_seen,
-        "vehicle_lots_seen": vehicle_seen,
+        "vehicle_auction_lots_seen": vehicle_seen,
+        "shopping_vehicle_offers_skipped": shopping_skipped,
         "saved": saved,
         "queued": queued,
         "vehicle_category_ids": sorted(categories),
