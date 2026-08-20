@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.11
+# SUPERBID Deal Intelligence v0.13
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -12,22 +12,17 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - calcula reventa conservadora, costo total, puja máxima, utilidad, ROI y score;
 - entrega dashboard y exportaciones CSV/XLSX.
 
-## v0.11 — descubrimiento paginado y Fasecolda central
+## v0.13 — validación HTTP directa
 
-- Las fuentes verificadas pueden registrarse como `paginated`; el collector conserva filtros existentes y recorre `pageNumber`/`pageSize` hasta la primera página vacía.
-- No se inventa el slug colombiano de vehículos: `SUPERBID_DISCOVERY_PAGINATED_URLS` solo debe contener URLs públicas previamente verificadas.
-- El parser acepta `winner_bid` numérico u objeto, registra `total_bidders` y comisión pública cuando exista, y sigue excluyendo `reserved_price` e identidad de pujadores.
-- Fasecolda usa `record_key` determinístico y se replica idempotentemente a Supabase.
+La v0.13 prueba si el endpoint público confirmado `offer-query.superbid.net/seo/offers/` puede refrescar un lote monitoreado sin Chromium, cookies del navegador, autenticación ni el parámetro opaco `filter`.
 
-Ejemplo:
+La sonda conserva únicamente parámetros públicos de enrutamiento como `portalId`, `locale`, `requestOrigin`, `timeZoneId` y `urlSeo`. Nunca persiste filtros opacos, tokens, cookies, reserva oculta ni identidad de pujadores.
 
-```bash
-superbid add-discovery-source "URL_PUBLICA_VERIFICADA?searchType=opened" --type paginated
-```
+Si la prueba real retorna el lote esperado, el monitoreo rutinario podrá pasar a HTTP directo y Chromium quedará como fallback para descubrimiento, anexos/peritajes y validación de cambios del frontend.
 
 ## Arquitectura
 
-`Superbid -> Playwright/XHR -> SQLite buffer -> Supabase -> valoración -> dashboard`
+`Superbid -> HTTP directo / Playwright fallback -> SQLite buffer -> Supabase -> valoración -> dashboard`
 
 Supabase central: `bxsfxydhuaqlkfoicbaz` (`sa-east-1`). La base está protegida con RLS y sin acceso directo para `anon/authenticated`.
 
@@ -38,21 +33,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[browser,dev]"
 playwright install chromium
-
-export SUPERBID_DB=superbid.db
-export SUPERBID_ADMIN_TOKEN=dev-secret
-uvicorn superbid_collector.api:app --reload
-```
-
-Dashboard: `http://127.0.0.1:8000/dashboard`
-
-## Pruebas
-
-```bash
 pytest -q
 ```
-
-La v0.11 tiene 37 pruebas unitarias aprobadas.
 
 ## Producción
 
@@ -60,6 +42,7 @@ Consulte:
 - [`docs/PRODUCTION.md`](docs/PRODUCTION.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md)
+- [`docs/V013_DIRECT_PUBLIC_API.md`](docs/V013_DIRECT_PUBLIC_API.md)
 - [`SECURITY.md`](SECURITY.md)
 
 ## Principio de seguridad de datos
