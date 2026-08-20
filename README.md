@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence
+# SUPERBID Deal Intelligence v0.11
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -11,6 +11,19 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - cruza Fasecolda y comparables de mercado;
 - calcula reventa conservadora, costo total, puja máxima, utilidad, ROI y score;
 - entrega dashboard y exportaciones CSV/XLSX.
+
+## v0.11 — descubrimiento paginado y Fasecolda central
+
+- Las fuentes verificadas pueden registrarse como `paginated`; el collector conserva filtros existentes y recorre `pageNumber`/`pageSize` hasta la primera página vacía.
+- No se inventa el slug colombiano de vehículos: `SUPERBID_DISCOVERY_PAGINATED_URLS` solo debe contener URLs públicas previamente verificadas.
+- El parser acepta `winner_bid` numérico u objeto, registra `total_bidders` y comisión pública cuando exista, y sigue excluyendo `reserved_price` e identidad de pujadores.
+- Fasecolda usa `record_key` determinístico y se replica idempotentemente a Supabase.
+
+Ejemplo:
+
+```bash
+superbid add-discovery-source "URL_PUBLICA_VERIFICADA?searchType=opened" --type paginated
+```
 
 ## Arquitectura
 
@@ -39,7 +52,7 @@ Dashboard: `http://127.0.0.1:8000/dashboard`
 pytest -q
 ```
 
-La línea base v0.10 tiene 31 pruebas unitarias aprobadas.
+La v0.11 tiene 37 pruebas unitarias aprobadas.
 
 ## Producción
 

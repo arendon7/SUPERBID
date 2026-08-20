@@ -9,4 +9,9 @@ def bootstrap(db:str):
         url=item.strip()
         if url:
             add_discovery_source(s,url)
+    paginated = os.getenv("SUPERBID_DISCOVERY_PAGINATED_URLS", "")
+    for item in paginated.replace("\n", ",").split(","):
+        url = item.strip()
+        if url:
+            add_discovery_source(s, url, source_type="paginated")
     return s
