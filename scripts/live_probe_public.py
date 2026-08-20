@@ -6,10 +6,19 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx
 
 from superbid_collector.attachments import extract_html_attachments, extract_json_attachments
 from superbid_collector.json_adapter import extract_offer_observations, looks_like_offer
-from superbid_collector.probe_sanitize import endpoint_signature, safe_observation, safe_shape, embedded_json_shapes
+from superbid_collector.probe_sanitize import (
+    endpoint_signature,
+    safe_observation,
+    safe_shape,
+    embedded_json_shapes,
+    public_endpoint_recipe,
+)
 from superbid_collector.fetchers import UA, validate_url
 from superbid_collector.parsers import lot_id_from_url
 
@@ -24,9 +33,57 @@ def _expected(url: str) -> str | None:
 def _iter_dicts(obj):
     if isinstance(obj, dict):
         yield obj
-        for v in obj.values(): yield from _iter_dicts(v)
+        for v in obj.values():
+            yield from _iter_dicts(v)
     elif isinstance(obj, list):
-        for v in obj: yield from _iter_dicts(v)
+        for v in obj:
+            yield from _iter_dicts(v)
+
+
+def _base_url(recipe: dict) -> str:
+    return urlunsplit((recipe.get("scheme") or "https", recipe.get("host") or "", recipe.get("path") or "", "", ""))
+
+
+async def _probe_direct_http(recipe: dict, expected: str | None, referer: str) -> dict:
+    """Replay a public SEO offer request without cookies, browser state or opaque filter."""
+    result = {
+        "attempted": True,
+        "endpoint": {k: recipe.get(k) for k in ("scheme", "host", "path")},
+        "params": recipe.get("params") or {},
+        "opaque_filter_used": False,
+        "browser_cookies_used": False,
+    }
+    try:
+        headers = {
+            "User-Agent": UA,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "es-CO,es;q=0.9,en;q=0.7",
+            "Origin": "https://www.superbid.com.co",
+            "Referer": referer,
+        }
+        async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
+            response = await client.get(_base_url(recipe), params=recipe.get("params") or {})
+        result["status"] = response.status_code
+        result["content_type"] = (response.headers.get("content-type") or "").split(";")[0]
+        try:
+            payload = response.json()
+        except Exception:
+            payload = None
+        if payload is not None:
+            result["shape"] = safe_shape(payload)
+            found = extract_offer_observations(payload, source_url=referer)
+            if expected:
+                found = [o for o in found if o.external_lot_id == expected]
+            result["lots_recognized"] = len(found)
+            result["observations"] = [safe_observation(o) for o in found]
+        else:
+            result["lots_recognized"] = 0
+            result["observations"] = []
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        result["lots_recognized"] = 0
+        result["observations"] = []
+    return result
 
 
 async def run(url: str, seconds: int, output: Path) -> int:
@@ -39,11 +96,12 @@ async def run(url: str, seconds: int, output: Path) -> int:
         "target": endpoint_signature(url),
         "expected_lot_id": expected,
         "page": {}, "responses": [], "observations": [], "attachments": [],
-        "embedded_json_shapes": [], "errors": [],
+        "embedded_json_shapes": [], "direct_http": {"attempted": False}, "errors": [],
     }
     observations = {}
     attachments = {}
     embedded = []
+    seo_recipe: dict | None = None
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -51,39 +109,49 @@ async def run(url: str, seconds: int, output: Path) -> int:
         page = await context.new_page()
 
         async def handle(resp):
+            nonlocal seo_recipe
             try:
                 ct = (resp.headers.get("content-type") or "").lower()
                 rt = resp.request.resource_type
-                if "json" not in ct and rt not in {"xhr", "fetch"}: return
+                if "json" not in ct and rt not in {"xhr", "fetch"}:
+                    return
                 entry = {
                     "endpoint": endpoint_signature(resp.url), "status": resp.status,
                     "resource_type": rt, "content_type": ct.split(";")[0],
                 }
-                try: payload = await resp.json()
-                except Exception: payload = None
+                parsed = urlsplit(resp.url)
+                if parsed.hostname == "offer-query.superbid.net" and parsed.path == "/seo/offers/":
+                    seo_recipe = public_endpoint_recipe(resp.url)
+                    entry["public_recipe"] = seo_recipe
+                try:
+                    payload = await resp.json()
+                except Exception:
+                    payload = None
                 if payload is not None:
                     entry["shape"] = safe_shape(payload)
                     found = extract_offer_observations(payload, source_url=url)
                     if expected:
                         found = [o for o in found if o.external_lot_id == expected]
-                    for obs in found: observations[obs.external_lot_id] = safe_observation(obs)
+                    for obs in found:
+                        observations[obs.external_lot_id] = safe_observation(obs)
 
                     if expected:
                         for obj in _iter_dicts(payload):
-                            if looks_like_offer(obj) and str(obj.get("id")) == expected:
+                            raw_id = obj.get("id") if isinstance(obj, dict) else None
+                            if looks_like_offer(obj) and str(raw_id) == expected:
                                 for att in extract_json_attachments(obj):
-                                    key=f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
-                                    attachments[key]={
-                                        "kind":att.get("kind"), "name":att.get("name"), "source":att.get("source"),
-                                        "endpoint":endpoint_signature(att.get("url") or ""),
+                                    key = f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
+                                    attachments[key] = {
+                                        "kind": att.get("kind"), "name": att.get("name"), "source": att.get("source"),
+                                        "endpoint": endpoint_signature(att.get("url") or ""),
                                     }
                                 embedded.extend(embedded_json_shapes(obj))
                     elif len(found) == 1:
                         for att in extract_json_attachments(payload):
-                            key=f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
-                            attachments[key]={
-                                "kind":att.get("kind"), "name":att.get("name"), "source":att.get("source"),
-                                "endpoint":endpoint_signature(att.get("url") or ""),
+                            key = f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
+                            attachments[key] = {
+                                "kind": att.get("kind"), "name": att.get("name"), "source": att.get("source"),
+                                "endpoint": endpoint_signature(att.get("url") or ""),
                             }
                 report["responses"].append(entry)
             except Exception as exc:
@@ -98,16 +166,20 @@ async def run(url: str, seconds: int, output: Path) -> int:
                 "title": await page.title(), "final_url": endpoint_signature(page.url),
             }
             for att in extract_html_attachments(url, await page.content()):
-                if att.get("kind") not in {"PERITAJE","CONDICIONES","CONTRATO"}: continue
-                key=f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
-                attachments[key]={
-                    "kind":att.get("kind"), "name":att.get("name"), "source":att.get("source"),
-                    "endpoint":endpoint_signature(att.get("url") or ""),
+                if att.get("kind") not in {"PERITAJE", "CONDICIONES", "CONTRATO"}:
+                    continue
+                key = f'{att.get("kind")}:{att.get("name")}:{endpoint_signature(att.get("url") or "").get("path")}'
+                attachments[key] = {
+                    "kind": att.get("kind"), "name": att.get("name"), "source": att.get("source"),
+                    "endpoint": endpoint_signature(att.get("url") or ""),
                 }
         except Exception as exc:
             report["errors"].append(f"page: {type(exc).__name__}: {exc}")
         finally:
             await browser.close()
+
+    if seo_recipe:
+        report["direct_http"] = await _probe_direct_http(seo_recipe, expected, url)
 
     unique = {}
     for row in report["responses"]:
@@ -116,22 +188,31 @@ async def run(url: str, seconds: int, output: Path) -> int:
     report["responses"] = list(unique.values())
     report["observations"] = list(observations.values())
     report["attachments"] = list(attachments.values())
-    # Deduplicate sanitized embedded shapes.
-    shapes={json.dumps(x,sort_keys=True):x for x in embedded}
+    shapes = {json.dumps(x, sort_keys=True): x for x in embedded}
     report["embedded_json_shapes"] = list(shapes.values())
     report["summary"] = {
-        "candidate_responses":len(report["responses"]), "lots_recognized":len(report["observations"]),
-        "attachments_recognized":len(report["attachments"]), "embedded_json_shapes":len(report["embedded_json_shapes"]),
-        "errors":len(report["errors"]),
+        "candidate_responses": len(report["responses"]),
+        "lots_recognized": len(report["observations"]),
+        "attachments_recognized": len(report["attachments"]),
+        "embedded_json_shapes": len(report["embedded_json_shapes"]),
+        "direct_http_status": report["direct_http"].get("status"),
+        "direct_http_lots_recognized": report["direct_http"].get("lots_recognized", 0),
+        "errors": len(report["errors"]),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
-    print(json.dumps(report["summary"],ensure_ascii=False))
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps(report["summary"], ensure_ascii=False))
     return 0 if report["page"].get("status") else 2
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument("url");ap.add_argument("--seconds",type=int,default=15);ap.add_argument("--output",default="probe-output/report.json")
-    args=ap.parse_args();raise SystemExit(asyncio.run(run(args.url,args.seconds,Path(args.output))))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("url")
+    ap.add_argument("--seconds", type=int, default=15)
+    ap.add_argument("--output", default="probe-output/report.json")
+    args = ap.parse_args()
+    raise SystemExit(asyncio.run(run(args.url, args.seconds, Path(args.output))))
 
-if __name__=="__main__": main()
+
+if __name__ == "__main__":
+    main()
