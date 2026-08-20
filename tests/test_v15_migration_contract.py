@@ -10,7 +10,10 @@ def test_v15_migration_never_persists_hidden_reserve_or_bidder_identity():
     lowered = sql.lower()
     assert "reservedprice" not in lowered
     assert "winnerbid" not in lowered
-    assert "bidder" not in lowered.replace("bidder identity storage", "")
+    # Aggregate bidder counts are allowed; bidder identity fields are not.
+    for forbidden in ("bidder_id", "bidder_name", "buyer_id", "buyer_name", "user_id", "email"):
+        assert forbidden not in lowered
+    assert "total_bidders" in lowered
     assert "seller, initial_bid_cop" in lowered
     assert "phone" not in lowered
 
