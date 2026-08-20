@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.16
+# SUPERBID Deal Intelligence v0.17
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -11,6 +11,45 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - cruza Fasecolda y comparables de mercado;
 - calcula reventa conservadora, costo total, puja máxima, utilidad, ROI y score;
 - entrega dashboard y exportaciones CSV/XLSX.
+
+## v0.17 — oportunidad preliminar segura
+
+La vista `lot_opportunity_preliminary` combina por lote:
+
+- puja actual;
+- comisión pública de Superbid;
+- IVA sobre comisión;
+- Fasecolda `HIGH` actual e histórico;
+- haircut conservador sobre Fasecolda;
+- utilidad objetivo;
+- techo antes de costos fijos;
+- costos fijos configurados/no configurados;
+- comparables disponibles;
+- peritajes;
+- estado de oportunidad.
+
+El perfil inicial `PRELIMINARY_FASECOLDA` usa:
+
+- IVA sobre comisión: 19%;
+- utilidad objetivo: 12% del valor preliminar;
+- utilidad mínima: COP 3.000.000;
+- referencia de reventa: 90% de Fasecolda.
+
+Los costos de traspaso, impuestos/SOAT, transporte, reparación, alistamiento, financiación, administración y contingencia quedan `NULL` hasta ser configurados. Por tanto, v0.17 **no emite recomendación final de compra**.
+
+Estados principales:
+
+- `REVIEW_VALUATION`
+- `REVIEW_COMMISSION`
+- `NO_CURRENT_BID`
+- `CONFIGURE_COSTS`
+- `MARKET_VALIDATION_PENDING`
+- `PRELIMINARY_OVER_CEILING`
+- `PRELIMINARY_WITHIN_CEILING`
+
+En todos los casos:
+
+`final_buy_recommendation_available = false`
 
 ## v0.16 — Fasecolda actual + histórico
 
@@ -136,6 +175,7 @@ Consulte:
 - [`docs/V013_DIRECT_PUBLIC_API.md`](docs/V013_DIRECT_PUBLIC_API.md)
 - [`docs/V015_SUPABASE_CRON.md`](docs/V015_SUPABASE_CRON.md)
 - [`docs/V016_FASECOLDA_MATCHING.md`](docs/V016_FASECOLDA_MATCHING.md)
+- [`docs/V017_PRELIMINARY_OPPORTUNITY.md`](docs/V017_PRELIMINARY_OPPORTUNITY.md)
 - [`SECURITY.md`](SECURITY.md)
 
 ## Principio de seguridad de datos
