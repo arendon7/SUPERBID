@@ -36,3 +36,9 @@ services:
         value: "300"
       - key: SUPERBID_DISCOVERY_URLS
         value: https://www.superbid.com.co/
+      - key: SUPERBID_DISCOVERY_PAGINATED_URLS
+        sync: false
+      - key: SUPERBID_DISCOVERY_MAX_PAGES
+        value: "10"
+      - key: SUPERBID_DISCOVERY_PAGE_SIZE
+        value: "30"
