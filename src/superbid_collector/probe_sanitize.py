@@ -10,12 +10,15 @@ SENSITIVE_FRAGMENTS = (
     "phone", "document", "identification", "password", "cookie", "session",
 )
 EMBEDDED_JSON_KEYS = {"productcustomjson", "customjson", "custom_json", "metadatajson", "metadata_json"}
-
-# Public routing/query values that are safe and useful for reproducing read-only
-# Superbid requests. Opaque filters are deliberately excluded.
 PUBLIC_RECIPE_KEYS = {
     "portalId", "locale", "requestOrigin", "timeZoneId", "urlSeo",
     "pageNumber", "pageSize", "searchType", "preOrderBy",
+}
+PUBLIC_TAXONOMY_KEYS = {
+    "id", "description", "desc", "name", "count", "productTypeId", "categoryId",
+    "fieldFilterCategoryId", "fieldFilterProductTypeId", "grupo", "subGrupo",
+    "modalityAuctionCount", "modalityAfterMarketCount", "modalityDirectSaleCount",
+    "modalityShoppingCount", "productsType", "categories", "subCategories",
 }
 
 
@@ -25,18 +28,12 @@ def sensitive_key(key: str) -> bool:
 
 
 def endpoint_signature(url: str) -> dict:
-    """Describe an endpoint without exposing query values or URL credentials."""
     p = urlsplit(url)
     query_keys = sorted({k for k, _ in parse_qsl(p.query, keep_blank_values=True) if not sensitive_key(k)})
     return {"scheme": p.scheme, "host": p.hostname, "path": p.path, "query_keys": query_keys}
 
 
 def public_query_values(url: str) -> dict[str, str]:
-    """Return a strict allow-list of non-sensitive public routing parameters.
-
-    Values are bounded to avoid accidentally persisting opaque blobs. In particular,
-    `filter`, `fieldList` and all authentication/session-like values are excluded.
-    """
     p = urlsplit(url)
     out: dict[str, str] = {}
     for key, value in parse_qsl(p.query, keep_blank_values=True):
@@ -59,7 +56,6 @@ def public_endpoint_recipe(url: str) -> dict:
 
 
 def safe_shape(value: Any, depth: int = 0, max_depth: int = 6) -> Any:
-    """Return JSON structure/key names only; never return scalar source values."""
     if depth >= max_depth:
         return type(value).__name__
     if isinstance(value, dict):
@@ -79,8 +75,28 @@ def safe_shape(value: Any, depth: int = 0, max_depth: int = 6) -> Any:
     return type(value).__name__
 
 
+def safe_public_taxonomy(value: Any, depth: int = 0, max_depth: int = 6) -> Any:
+    """Keep only public taxonomy IDs/descriptions/counts from the categories endpoint."""
+    if depth >= max_depth:
+        return None
+    if isinstance(value, dict):
+        out = {}
+        for key, child in value.items():
+            if sensitive_key(str(key)) or key not in PUBLIC_TAXONOMY_KEYS:
+                continue
+            if isinstance(child, (dict, list)):
+                out[key] = safe_public_taxonomy(child, depth + 1, max_depth)
+            elif child is None or isinstance(child, (str, int, float, bool)):
+                out[key] = child
+        return out
+    if isinstance(value, list):
+        return [safe_public_taxonomy(v, depth + 1, max_depth) for v in value[:100]]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return None
+
+
 def embedded_json_shapes(value: Any) -> list[dict]:
-    """Parse known embedded JSON strings and return sanitized shapes only."""
     out = []
     def walk(obj):
         if isinstance(obj, dict):
@@ -94,7 +110,8 @@ def embedded_json_shapes(value: Any) -> list[dict]:
                 else:
                     walk(v)
         elif isinstance(obj, list):
-            for v in obj: walk(v)
+            for v in obj:
+                walk(v)
     walk(value)
     return out
 

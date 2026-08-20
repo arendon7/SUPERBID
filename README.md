@@ -1,28 +1,39 @@
-# SUPERBID Deal Intelligence v0.13
+# SUPERBID Deal Intelligence v0.14
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
 ## Qué resuelve
 
-- detecta y monitorea lotes públicos;
-- registra puja actual, trayectoria de lances y fecha/hora de cierre cuando están disponibles;
-- identifica anexos y peritajes públicos;
+- descubre automáticamente inventario abierto de vehículos;
+- monitorea cada lote con puja actual, trayectoria, cierre y estado;
+- identifica anexos y peritajes públicos cuando existen;
 - construye histórico sin confundir **última puja** con **adjudicación confirmada**;
 - cruza Fasecolda y comparables de mercado;
 - calcula reventa conservadora, costo total, puja máxima, utilidad, ROI y score;
 - entrega dashboard y exportaciones CSV/XLSX.
 
-## v0.13 — validación HTTP directa
+## v0.14 — discovery HTTP directo confirmado
 
-La v0.13 prueba si el endpoint público confirmado `offer-query.superbid.net/seo/offers/` puede refrescar un lote monitoreado sin Chromium, cookies del navegador, autenticación ni el parámetro opaco `filter`.
+La plataforma pública de Colombia fue validada desde GitHub Actions con un cliente HTTP sin cookies, autenticación, `filter` opaco ni `fieldList`:
 
-La sonda conserva únicamente parámetros públicos de enrutamiento como `portalId`, `locale`, `requestOrigin`, `timeZoneId` y `urlSeo`. Nunca persiste filtros opacos, tokens, cookies, reserva oculta ni identidad de pujadores.
+- `offer-query.superbid.net/offers/` → HTTP 200;
+- inventario abierto observado en la validación: **352 lotes**;
+- `offer-query.superbid.net/categories/` → HTTP 200;
+- taxonomía pública útil para filtrar estructuradamente.
 
-Si la prueba real retorna el lote esperado, el monitoreo rutinario podrá pasar a HTTP directo y Chromium quedará como fallback para descubrimiento, anexos/peritajes y validación de cambios del frontend.
+Categorías vehiculares confirmadas:
+
+- `10000` → **Autos**;
+- `10022` → **Camiones**;
+- `10012` → **Motos** (opt-in, no incluida por defecto).
+
+Por defecto el collector descubre **Autos + Camiones** (`10000,10022`).
 
 ## Arquitectura
 
-`Superbid -> HTTP directo / Playwright fallback -> SQLite buffer -> Supabase -> valoración -> dashboard`
+`Superbid public HTTP -> discovery/monitoring -> SQLite buffer -> Supabase -> valoración -> dashboard`
+
+Playwright/Chromium queda como fallback para cambios del contrato, inspección de anexos/peritajes y validación del frontend.
 
 Supabase central: `bxsfxydhuaqlkfoicbaz` (`sa-east-1`). La base está protegida con RLS y sin acceso directo para `anon/authenticated`.
 
@@ -36,6 +47,17 @@ playwright install chromium
 pytest -q
 ```
 
+## Variables principales
+
+```bash
+SUPERBID_DIRECT_HTTP_ENABLED=1
+SUPERBID_DIRECT_DISCOVERY_ENABLED=1
+SUPERBID_BROWSER_DISCOVERY_ALWAYS=0
+SUPERBID_VEHICLE_CATEGORY_IDS=10000,10022
+```
+
+Para incluir motos: `SUPERBID_VEHICLE_CATEGORY_IDS=10000,10022,10012`.
+
 ## Producción
 
 Consulte:
@@ -47,4 +69,4 @@ Consulte:
 
 ## Principio de seguridad de datos
 
-La herramienta solo debe recolectar datos públicamente accesibles o autorizados. No debe evadir CAPTCHA, autenticación, controles de acceso ni rate limits, y no almacena identidades de pujadores ni precios de reserva ocultos.
+La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits, y no almacena identidades de pujadores ni precios de reserva ocultos.

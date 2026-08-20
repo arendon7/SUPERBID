@@ -32,6 +32,16 @@ services:
         value: UTC
       - key: SUPERBID_PUBLIC_REQUEST_ORIGIN
         value: marketplace
+      - key: SUPERBID_DIRECT_DISCOVERY_ENABLED
+        value: "1"
+      - key: SUPERBID_BROWSER_DISCOVERY_ALWAYS
+        value: "0"
+      - key: SUPERBID_DIRECT_DISCOVERY_PAGE_SIZE
+        value: "24"
+      - key: SUPERBID_DIRECT_DISCOVERY_MAX_PAGES
+        value: "25"
+      - key: SUPERBID_VEHICLE_CATEGORY_IDS
+        value: "10000,10022"
       - key: SUPERBID_ADMIN_TOKEN
         generateValue: true
       - key: SUPERBID_DASHBOARD_TOKEN
