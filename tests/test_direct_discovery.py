@@ -5,17 +5,24 @@ from superbid_collector.storage import Store
 from superbid_collector.direct_discovery import discover_open_vehicles_direct, public_lot_url
 
 
-def _offer(lot_id: int, category_id: int, title: str):
+def _offer(lot_id: int, category_id: int, title: str, *, shopping: bool = False):
     return {
         "id": lot_id,
         "lotNumber": lot_id % 100,
         "price": 30000000,
         "totalBids": 1,
         "endDate": "2026-08-27 15:36:00",
-        "offerStatus": {"available": True, "giveYourBid": True, "closed": False, "sold": False},
+        "isShopping": shopping,
+        "shoppingOfferType": shopping,
+        "offerStatus": {"available": True, "giveYourBid": not shopping, "closed": False, "sold": False},
         "offerDetail": {"initialBidValue": 25000000, "currentMaxBid": 30000000},
         "groupOffer": {"commissionPercent": 6.5},
-        "auction": {"id": 1, "desc": "Evento", "currencyIso": "COP"},
+        "auction": {
+            "id": 1,
+            "desc": "Evento",
+            "currencyIso": "COP",
+            "modalityDesc": "Shopping" if shopping else "Subasta",
+        },
         "seller": {"name": "Vendedor"},
         "product": {
             "shortDesc": title,
@@ -37,18 +44,19 @@ def test_public_lot_url_uses_title_slug_and_stable_id():
 
 
 @pytest.mark.asyncio
-async def test_direct_discovery_filters_autos_and_trucks_but_not_motos(tmp_path):
+async def test_direct_discovery_filters_categories_and_shopping(tmp_path):
     page1 = {
         "offers": [
             _offer(5000001, 10000, "TOYOTA COROLLA MOD. 2022"),
             _offer(5000002, 10012, "YAMAHA MOTO MOD. 2024"),
             _offer(5000003, 99999, "EQUIPO INDUSTRIAL"),
+            _offer(5000005, 10000, "AUTO SHOPPING", shopping=True),
         ],
-        "total": 4,
+        "total": 5,
     }
     page2 = {
         "offers": [_offer(5000004, 10022, "HINO CAMION MOD. 2020")],
-        "total": 4,
+        "total": 5,
     }
 
     def handler(request: httpx.Request):
@@ -62,12 +70,13 @@ async def test_direct_discovery_filters_autos_and_trucks_but_not_motos(tmp_path)
     s.init()
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         result = await discover_open_vehicles_direct(
-            s, max_pages=5, page_size=3, client=client
+            s, max_pages=5, page_size=4, client=client
         )
 
     assert result["pages_scanned"] == 2
-    assert result["offers_seen"] == 4
-    assert result["vehicle_lots_seen"] == 2
+    assert result["offers_seen"] == 5
+    assert result["vehicle_auction_lots_seen"] == 2
+    assert result["shopping_vehicle_offers_skipped"] == 1
     assert result["queued"] == 2
     ids = {
         row["external_lot_id"]
