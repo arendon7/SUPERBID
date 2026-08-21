@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.27
+# SUPERBID Deal Intelligence v0.28
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -20,7 +20,30 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - presión competitiva descriptiva basada en actividad observada y extensiones de cierre;
 - cola operativa separada del score económico, ordenada por urgencia de cierre y presión;
 - dashboard con filtros visuales de estado, presión y ventana de cierre;
-- feed persistente y deduplicado de alertas operativas.
+- feed persistente y deduplicado de alertas operativas;
+- lifecycle de alertas con disposición manual, resolución automática e historial auditable.
+
+## v0.28 — lifecycle de alertas
+
+La gestión de alertas separa explícitamente **atención humana** de **resolución de la condición**.
+
+Disposición manual:
+- `ACKNOWLEDGED`: alerta reconocida;
+- `DISMISSED`: alerta descartada operativamente;
+- `REOPEN`: vuelve a dejar la alerta pendiente.
+
+Resolución automática:
+- `CLOSING_2H` se resuelve cuando deja de cumplirse su condición;
+- `HIGH_PRESSURE` se resuelve cuando deja de existir presión `HIGH` reciente;
+- `CLOSE_EXTENSION` se archiva 24 horas después del evento observado.
+
+Cada acción manual se registra en `operational_alert_action_history`. El cron `superbid-alert-lifecycle-v28` corre cada minuto y reemplaza al cron v0.27.
+
+Interpretación obligatoria de las acciones:
+
+`ALERT_LIFECYCLE_ACTION_NOT_BUY_SIGNAL`
+
+El dashboard `/alerts` permite ver `Pendientes / Atendidas / Resueltas / Todas` y ejecutar `Reconocer / Descartar / Reabrir` mediante POST server-rendered. Estas acciones no modifican score, puja máxima, costos ni decisión final.
 
 ## v0.27 — feed de alertas operativas
 
@@ -31,17 +54,17 @@ Tipos iniciales:
 - `HIGH_PRESSURE` / `WARNING`: episodio reciente de presión competitiva `HIGH` en `REVIEW_NOW` o `REVIEW_SOON`;
 - `CLOSE_EXTENSION` / `INFO`: `closes_at` aumentó realmente entre snapshots consecutivos.
 
-Cada alerta usa `dedupe_key UNIQUE` y `refresh_operational_alerts()` inserta con `ON CONFLICT DO NOTHING`. El cron `superbid-operational-alerts-v27` corre cada minuto.
+Cada alerta usa `dedupe_key UNIQUE` y `refresh_operational_alerts()` inserta con `ON CONFLICT DO NOTHING`.
 
 Interpretación obligatoria:
 
 `OPERATIONAL_ALERT_NOT_BUY_SIGNAL`
 
-Nueva página privada:
+Página privada:
 `/functions/v1/superbid-dashboard/alerts`
 
 API privada:
-`GET /alerts` con filtros `type`, `severity`, `open` y `limit`.
+`GET /alerts` con filtros de tipo, severidad y lifecycle.
 
 El feed ordena por el momento observado en la fuente, no por la hora de retrocarga.
 
@@ -187,7 +210,7 @@ Supabase/PostgreSQL consulta los endpoints públicos de Superbid mediante `http`
 - nunca se equipara una puja observada con adjudicación confirmada;
 - una venta exige señal explícita `offerStatus.sold=true`;
 - un cambio entre snapshots no se presenta como lance individual;
-- presión, prioridad operativa y alertas no son señales automáticas de compra;
+- presión, prioridad operativa, alertas y lifecycle no son señales automáticas de compra;
 - Fasecolda es referencia comercial, no precio de transacción;
 - Mercado Libre aporta precios pedidos, no precios vendidos;
 - no se almacena `reservedPrice`, identidad de pujadores, cookies ni filtros opacos;
@@ -230,6 +253,7 @@ pytest -q
 - [`docs/V025_OPERATIONAL_QUEUE.md`](docs/V025_OPERATIONAL_QUEUE.md)
 - [`docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md`](docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md)
 - [`docs/V027_OPERATIONAL_ALERT_FEED.md`](docs/V027_OPERATIONAL_ALERT_FEED.md)
+- [`docs/V028_ALERT_LIFECYCLE.md`](docs/V028_ALERT_LIFECYCLE.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
