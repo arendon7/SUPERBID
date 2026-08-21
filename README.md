@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.20
+# SUPERBID Deal Intelligence v0.21
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -13,57 +13,45 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - cola priorizada `REVIEW_NOW / REVIEW_SOON / WATCH`;
 - OAuth Mercado Libre/TuCarro preparado, actualmente `APP_REQUIRED`;
 - motor preliminar y motor final market-validated;
-- dashboard central privado sobre Supabase.
+- dashboard central privado sobre Supabase;
+- captura y revisión auditable de costos específicos por lote.
+
+## v0.21 — revisión de costos por lote
+
+Desde el detalle de cada lote se pueden registrar:
+- traspaso;
+- impuestos / SOAT;
+- transporte;
+- reparación;
+- alistamiento;
+- financiación;
+- administración;
+- contingencia.
+
+El formulario permite guardar borradores incompletos y añadir notas/fuentes de soporte. Solo se puede marcar como `revisado` cuando los ocho costos estén completos.
+
+Cualquier edición posterior invalida la revisión anterior (`reviewed_at = NULL`) hasta que se vuelva a marcar explícitamente como revisada. Cada guardado genera un snapshot en `lot_cost_review_history`, de modo que la construcción de la puja máxima sea auditable.
+
+La función `dashboard_save_lot_costs(...)` solo puede ejecutarla `service_role`; `anon/authenticated` no tienen acceso directo.
 
 ## v0.20 — dashboard central
 
-El dashboard dejó de depender de SQLite local. La fuente operativa es `dashboard_lot_current`, una vista backend-only que combina:
+El dashboard dejó de depender de SQLite local. La fuente operativa es `dashboard_lot_current`, una vista backend-only que combina puja, cierre, comisión, Fasecolda, peritajes, review score, mercado, costos y resultados económicos cuando estén validados.
 
-- puja actual y cierre;
-- número de pujas;
-- comisión pública;
-- Fasecolda actual e histórico ~12 meses;
-- peritajes;
-- review score/state;
-- comparables/venta rápida cuando Mercado Libre esté `READY`;
-- costos revisados por lote;
-- puja máxima, utilidad y ROI únicamente cuando la validación final esté disponible.
+API privada: `superbid-read-api`.
 
-### API privada
-
-Edge Function `superbid-read-api`:
-
-- `/health`
-- `/summary`
-- `/review-queue`
-- `/lots/{external_lot_id}`
-- `/history`
-
-Requiere una credencial de lectura almacenada en Supabase Vault. Nunca expone `service_role` al navegador.
-
-### Dashboard privado
-
-Edge Function `superbid-dashboard`:
-
+Dashboard privado:
 `https://bxsfxydhuaqlkfoicbaz.supabase.co/functions/v1/superbid-dashboard`
 
-Características:
-
-- server-rendered, sin JavaScript cliente;
-- login por POST;
-- cookie `HttpOnly; Secure; SameSite=Strict`;
-- filtros por prioridad;
-- detalle por lote;
-- acceso directo a peritajes públicos;
-- indica explícitamente que `REVIEW_NOW` es prioridad de análisis, no una señal `COMPRAR`.
+Características: server-rendered, login por POST, cookie `HttpOnly; Secure; SameSite=Strict`, filtros de prioridad, detalle por lote y acceso directo a peritajes públicos.
 
 ## v0.19 — cola de revisión
 
-`lot_review_queue_current` prioriza dónde invertir primero el tiempo de análisis. El score combina headroom preliminar, peritaje, urgencia de cierre, actividad de pujas y comisión. Estados: `CLOSED_OR_PAST`, `BLOCKED_VALUATION`, `NO_HEADROOM`, `REVIEW_NOW`, `REVIEW_SOON`, `WATCH`.
+`lot_review_queue_current` prioriza dónde invertir primero el tiempo de análisis. `REVIEW_NOW` significa revisar costos/peritaje/mercado ahora; nunca significa `COMPRAR`.
 
 ## v0.18 — comparables Mercado Libre/TuCarro
 
-La integración usa la API oficial `MCO` mediante OAuth + PKCE. `client_secret`, access token y refresh token están diseñados para vivir cifrados en Supabase Vault. Mientras no exista una aplicación autorizada, `market_connections.status=APP_REQUIRED` y no se hacen búsquedas ni se crean comparables ficticios.
+La integración usa la API oficial `MCO` mediante OAuth + PKCE. Secretos/tokens están diseñados para vivir cifrados en Supabase Vault. Mientras no exista una aplicación autorizada, `market_connections.status=APP_REQUIRED` y no se hacen búsquedas ni se crean comparables ficticios.
 
 `market_valuations` calcula mediana, P25, P75, dispersión, confianza y venta rápida. `READY` exige al menos 3 comparables compatibles. La decisión final también exige costos específicos del lote completos y revisados.
 
@@ -122,6 +110,7 @@ pytest -q
 - [`docs/V018_MARKET_COMPARABLES.md`](docs/V018_MARKET_COMPARABLES.md)
 - [`docs/V019_REVIEW_QUEUE.md`](docs/V019_REVIEW_QUEUE.md)
 - [`docs/V020_CENTRAL_DASHBOARD.md`](docs/V020_CENTRAL_DASHBOARD.md)
+- [`docs/V021_LOT_COST_REVIEW.md`](docs/V021_LOT_COST_REVIEW.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
