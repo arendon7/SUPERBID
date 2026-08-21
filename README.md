@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.24
+# SUPERBID Deal Intelligence v0.25
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -17,7 +17,23 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - captura y revisión auditable de costos específicos por lote;
 - histórico central descargable con `SALE_CONFIRMED / CLOSING_OBSERVED / NO_FINAL_VALUE`;
 - eventos observados de cambio de precio/contador de pujas, sin presentarlos como lances individuales;
-- presión competitiva descriptiva basada en actividad observada y extensiones de cierre.
+- presión competitiva descriptiva basada en actividad observada y extensiones de cierre;
+- cola operativa separada del score económico, ordenada por urgencia de cierre y presión.
+
+## v0.25 — cola operativa
+
+`dashboard_operational_queue` combina el estado de revisión, la cercanía del cierre y la presión competitiva para responder qué lotes requieren atención primero.
+
+Añade:
+- `closing_bucket`: `CLOSING_2H`, `CLOSING_6H`, `CLOSING_24H`, `LATER`, `PAST` o `NO_CLOSE_TIME`;
+- `pressure_level`;
+- `operational_rank`;
+- `operational_reason`;
+- evidencia reciente de presión y extensiones de cierre.
+
+La interpretación es siempre `OPERATIONAL_TRIAGE_NOT_BUY_SIGNAL`: organiza trabajo, pero no modifica el score económico, la puja máxima ni la decisión final.
+
+API privada: `GET /operational-queue` con filtros opcionales `state`, `pressure`, `closing` y `limit`.
 
 ## v0.24 — presión competitiva observada
 
@@ -124,7 +140,7 @@ Supabase/PostgreSQL consulta los endpoints públicos de Superbid mediante `http`
 - nunca se equipara una puja observada con adjudicación confirmada;
 - una venta exige señal explícita `offerStatus.sold=true`;
 - un cambio entre snapshots no se presenta como lance individual;
-- la presión competitiva es observacional, no una señal automática de compra;
+- la presión competitiva y la prioridad operativa no son señales automáticas de compra;
 - Fasecolda es referencia comercial, no precio de transacción;
 - Mercado Libre aporta precios pedidos, no precios vendidos;
 - no se almacena `reservedPrice`, identidad de pujadores, cookies ni filtros opacos;
@@ -164,6 +180,7 @@ pytest -q
 - [`docs/V022_HISTORICAL_INTELLIGENCE.md`](docs/V022_HISTORICAL_INTELLIGENCE.md)
 - [`docs/V023_OBSERVED_BID_EVENTS.md`](docs/V023_OBSERVED_BID_EVENTS.md)
 - [`docs/V024_BID_PRESSURE.md`](docs/V024_BID_PRESSURE.md)
+- [`docs/V025_OPERATIONAL_QUEUE.md`](docs/V025_OPERATIONAL_QUEUE.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
