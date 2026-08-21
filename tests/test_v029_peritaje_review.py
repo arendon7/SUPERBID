@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260821153848_peritaje_review_workflow_v29.sql").read_text(encoding="utf-8").lower()
@@ -68,8 +69,9 @@ def test_peritaje_handler_does_not_write_economic_costs_or_decision():
     assert "final_decision" not in fn
 
 
-def test_read_api_v029_remains_get_only():
-    assert 'version:"0.29"' in API
+def test_read_api_v029_capability_remains_get_only():
+    match = re.search(r'version:"(\d+)\.(\d+)"', API)
+    assert match and tuple(map(int, match.groups())) >= (0, 29)
     assert 'req.method!=="get"' in API
     assert 'p==="/peritaje-reviews"' in API
     assert "/peritaje-review" in API
