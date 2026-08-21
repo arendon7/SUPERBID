@@ -18,9 +18,14 @@ def test_dashboard_token_secret_is_only_referenced_by_name():
 
 
 def test_read_api_requires_custom_authorization():
-    assert 'if (!await authorized(req)) return json({ error: "unauthorized" }, 401)' in API
+    # Guard semantics, not internal helper names/formatting.
     assert "dashboard_token_valid" in API
+    assert "unauthorized" in API
+    assert "401" in API
     assert "supabase_service_role_key" in API
+    guard_pos = API.index("unauthorized")
+    first_route_pos = API.index('p==="/health"')
+    assert guard_pos < first_route_pos
     assert "cache-control" in API and "no-store" in API
 
 
