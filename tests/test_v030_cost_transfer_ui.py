@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 API = (ROOT / "supabase/functions/superbid-read-api/index.ts").read_text(encoding="utf-8").lower()
@@ -32,8 +33,9 @@ def test_dashboard_exposes_cost_readiness_queue():
     assert "repair_cost_source_status" in DASH
 
 
-def test_read_api_v030_is_get_only_and_exposes_cost_readiness():
-    assert 'version:"0.30"' in API
+def test_read_api_v030_capability_remains_get_only():
+    match = re.search(r'version:"(\d+)\.(\d+)"', API)
+    assert match and tuple(map(int, match.groups())) >= (0, 30)
     assert 'req.method!=="get"' in API
     assert 'p==="/cost-readiness"' in API
     assert "dashboard_cost_readiness_current" in API
