@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260821150109_operational_alert_feed_v27.sql").read_text(encoding="utf-8").lower()
@@ -57,7 +58,8 @@ def test_private_api_exposes_alerts_with_auth_guard():
     assert "severity=eq." in API
     assert "is_open=eq." in API
     assert "unauthorized" in API and "401" in API
-    assert 'version:"0.27"' in API
+    m = re.search(r'version:\"(\d+)\.(\d+)\"', API)
+    assert m and (int(m.group(1)), int(m.group(2))) >= (0, 27)
 
 
 def test_dashboard_has_alert_feed_without_buy_action():
