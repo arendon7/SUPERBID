@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260821143358_operational_pressure_queue_v25.sql").read_text(encoding="utf-8").lower()
@@ -26,7 +27,9 @@ def test_private_api_exposes_filtered_operational_queue():
     assert "closing_bucket=eq." in API
     assert "review_state=eq." in API
     assert "operational_rank.asc" in API
-    assert 'version:"0.25"' in API
+    match = re.search(r'version:"(\d+)\.(\d+)"', API)
+    assert match is not None
+    assert tuple(map(int, match.groups())) >= (0, 25)
 
 
 def test_old_review_queue_remains_available():

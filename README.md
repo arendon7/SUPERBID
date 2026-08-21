@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.26
+# SUPERBID Deal Intelligence v0.27
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -19,11 +19,35 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - eventos observados de cambio de precio/contador de pujas, sin presentarlos como lances individuales;
 - presión competitiva descriptiva basada en actividad observada y extensiones de cierre;
 - cola operativa separada del score económico, ordenada por urgencia de cierre y presión;
-- dashboard v0.26 con filtros visuales de estado, presión y ventana de cierre.
+- dashboard con filtros visuales de estado, presión y ventana de cierre;
+- feed persistente y deduplicado de alertas operativas.
+
+## v0.27 — feed de alertas operativas
+
+`operational_alert_events` persiste eventos de atención sin modificar la valoración económica.
+
+Tipos iniciales:
+- `CLOSING_2H` / `URGENT`: lote `REVIEW_NOW` que entra a menos de dos horas del cierre vigente;
+- `HIGH_PRESSURE` / `WARNING`: episodio reciente de presión competitiva `HIGH` en `REVIEW_NOW` o `REVIEW_SOON`;
+- `CLOSE_EXTENSION` / `INFO`: `closes_at` aumentó realmente entre snapshots consecutivos.
+
+Cada alerta usa `dedupe_key UNIQUE` y `refresh_operational_alerts()` inserta con `ON CONFLICT DO NOTHING`. El cron `superbid-operational-alerts-v27` corre cada minuto.
+
+Interpretación obligatoria:
+
+`OPERATIONAL_ALERT_NOT_BUY_SIGNAL`
+
+Nueva página privada:
+`/functions/v1/superbid-dashboard/alerts`
+
+API privada:
+`GET /alerts` con filtros `type`, `severity`, `open` y `limit`.
+
+El feed ordena por el momento observado en la fuente, no por la hora de retrocarga.
 
 ## v0.26 — dashboard de prioridad operativa
 
-La portada privada ahora consulta directamente `dashboard_operational_queue` y ordena por:
+La portada privada consulta directamente `dashboard_operational_queue` y ordena por:
 
 1. `operational_rank ASC`;
 2. `review_score DESC`;
@@ -163,7 +187,7 @@ Supabase/PostgreSQL consulta los endpoints públicos de Superbid mediante `http`
 - nunca se equipara una puja observada con adjudicación confirmada;
 - una venta exige señal explícita `offerStatus.sold=true`;
 - un cambio entre snapshots no se presenta como lance individual;
-- la presión competitiva y la prioridad operativa no son señales automáticas de compra;
+- presión, prioridad operativa y alertas no son señales automáticas de compra;
 - Fasecolda es referencia comercial, no precio de transacción;
 - Mercado Libre aporta precios pedidos, no precios vendidos;
 - no se almacena `reservedPrice`, identidad de pujadores, cookies ni filtros opacos;
@@ -205,6 +229,7 @@ pytest -q
 - [`docs/V024_BID_PRESSURE.md`](docs/V024_BID_PRESSURE.md)
 - [`docs/V025_OPERATIONAL_QUEUE.md`](docs/V025_OPERATIONAL_QUEUE.md)
 - [`docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md`](docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md)
+- [`docs/V027_OPERATIONAL_ALERT_FEED.md`](docs/V027_OPERATIONAL_ALERT_FEED.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
