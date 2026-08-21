@@ -6,7 +6,7 @@ DASH = (ROOT / "supabase/functions/superbid-dashboard/index.ts").read_text(encod
 
 def test_home_reads_operational_queue_not_legacy_lot_view():
     start = DASH.index("async function operationallots")
-    end = DASH.index("function option", start)
+    end = DASH.index("async function home", start)
     fn = DASH[start:end]
     assert "dashboard_operational_queue" in fn
     assert "operational_rank.asc" in fn
