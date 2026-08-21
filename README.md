@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.21
+# SUPERBID Deal Intelligence v0.23
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -14,7 +14,36 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - OAuth Mercado Libre/TuCarro preparado, actualmente `APP_REQUIRED`;
 - motor preliminar y motor final market-validated;
 - dashboard central privado sobre Supabase;
-- captura y revisión auditable de costos específicos por lote.
+- captura y revisión auditable de costos específicos por lote;
+- histórico central descargable con `SALE_CONFIRMED / CLOSING_OBSERVED / NO_FINAL_VALUE`;
+- eventos observados de cambio de precio/contador de pujas, sin presentarlos como lances individuales.
+
+## v0.23 — eventos observados de puja/precio
+
+`lot_observed_bid_events` compara snapshots consecutivos y detecta cuándo cambió el precio mostrado, el contador de pujas o ambos.
+
+Estados principales:
+- `INITIAL_OBSERVATION`;
+- `PRICE_AND_BID_COUNT_CHANGE`;
+- `PRICE_CHANGE_OBSERVED`;
+- `BID_COUNT_CHANGE_OBSERVED`.
+
+Cada evento conserva precio anterior/actual, delta de precio, contador anterior/actual, delta de pujas, hora observada y estado vigente. Todos los registros derivados de snapshots llevan `is_individual_bid=false`.
+
+Esto permite analizar presión competitiva y aceleración de precio sin inventar una secuencia de lances que la fuente pública no enumera. El detalle del lote muestra esta trayectoria en una tabla separada del histórico individual de lances.
+
+API privada adicional: `GET /lots/{id}/observed-bid-events`.
+
+## v0.22 — inteligencia histórica central
+
+El histórico distingue obligatoriamente:
+- `SALE_CONFIRMED`: venta/adjudicación explícitamente confirmada;
+- `CLOSING_OBSERVED`: cierre observado sin prueba de venta;
+- `NO_FINAL_VALUE`: no existe un valor final defendible.
+
+`NO_FINAL_VALUE` nunca se rellena con la última puja. El timeline por lote incluye snapshots, serie Fasecolda, proveniencia, revisiones de costos y lances individuales únicamente cuando exista una fuente pública que realmente los enumere.
+
+El dashboard incorpora búsqueda histórica y descarga `superbid_historico.csv`.
 
 ## v0.21 — revisión de costos por lote
 
@@ -75,6 +104,7 @@ Supabase/PostgreSQL consulta los endpoints públicos de Superbid mediante `http`
 
 - nunca se equipara una puja observada con adjudicación confirmada;
 - una venta exige señal explícita `offerStatus.sold=true`;
+- un cambio entre snapshots no se presenta como lance individual;
 - Fasecolda es referencia comercial, no precio de transacción;
 - Mercado Libre aporta precios pedidos, no precios vendidos;
 - no se almacena `reservedPrice`, identidad de pujadores, cookies ni filtros opacos;
@@ -111,6 +141,8 @@ pytest -q
 - [`docs/V019_REVIEW_QUEUE.md`](docs/V019_REVIEW_QUEUE.md)
 - [`docs/V020_CENTRAL_DASHBOARD.md`](docs/V020_CENTRAL_DASHBOARD.md)
 - [`docs/V021_LOT_COST_REVIEW.md`](docs/V021_LOT_COST_REVIEW.md)
+- [`docs/V022_HISTORICAL_INTELLIGENCE.md`](docs/V022_HISTORICAL_INTELLIGENCE.md)
+- [`docs/V023_OBSERVED_BID_EVENTS.md`](docs/V023_OBSERVED_BID_EVENTS.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
