@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.25
+# SUPERBID Deal Intelligence v0.26
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -18,7 +18,30 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - histórico central descargable con `SALE_CONFIRMED / CLOSING_OBSERVED / NO_FINAL_VALUE`;
 - eventos observados de cambio de precio/contador de pujas, sin presentarlos como lances individuales;
 - presión competitiva descriptiva basada en actividad observada y extensiones de cierre;
-- cola operativa separada del score económico, ordenada por urgencia de cierre y presión.
+- cola operativa separada del score económico, ordenada por urgencia de cierre y presión;
+- dashboard v0.26 con filtros visuales de estado, presión y ventana de cierre.
+
+## v0.26 — dashboard de prioridad operativa
+
+La portada privada ahora consulta directamente `dashboard_operational_queue` y ordena por:
+
+1. `operational_rank ASC`;
+2. `review_score DESC`;
+3. `closes_at ASC`.
+
+Filtros server-rendered, sin JavaScript cliente:
+- estado de revisión;
+- presión `HIGH / MEDIUM / LOW / NONE`;
+- cierre `<2h / <6h / <24h / posterior`.
+
+La tabla separa visualmente:
+- prioridad operativa y razón;
+- score de revisión;
+- presión;
+- ventana de cierre;
+- puja, Fasecolda, headroom y peritaje.
+
+La prioridad operativa organiza qué revisar primero; no modifica `review_score`, `review_state`, puja máxima validada ni decisión final.
 
 ## v0.25 — cola operativa
 
@@ -181,6 +204,7 @@ pytest -q
 - [`docs/V023_OBSERVED_BID_EVENTS.md`](docs/V023_OBSERVED_BID_EVENTS.md)
 - [`docs/V024_BID_PRESSURE.md`](docs/V024_BID_PRESSURE.md)
 - [`docs/V025_OPERATIONAL_QUEUE.md`](docs/V025_OPERATIONAL_QUEUE.md)
+- [`docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md`](docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
