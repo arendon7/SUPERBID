@@ -1,4 +1,4 @@
-# SUPERBID Deal Intelligence v0.28
+# SUPERBID Deal Intelligence v0.29
 
 Motor de inteligencia para compra y reventa de vehículos subastados en Superbid Colombia.
 
@@ -8,6 +8,7 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - monitoreo 24/7 dentro de Supabase con `pg_cron`;
 - puja, cierre, número de pujas y comisión pública;
 - detección automática de peritajes/anexos;
+- revisión humana estructurada y auditable de peritajes públicos;
 - histórico con proveniencia estricta;
 - Fasecolda actual + serie histórica + matching conservador;
 - cola priorizada `REVIEW_NOW / REVIEW_SOON / WATCH`;
@@ -22,6 +23,49 @@ Motor de inteligencia para compra y reventa de vehículos subastados en Superbid
 - dashboard con filtros visuales de estado, presión y ventana de cierre;
 - feed persistente y deduplicado de alertas operativas;
 - lifecycle de alertas con disposición manual, resolución automática e historial auditable.
+
+## v0.29 — revisión estructurada de peritajes
+
+Los peritajes públicos pasan a un flujo de revisión humana trazable antes de completar los costos específicos del vehículo.
+
+Estados:
+- `UNREVIEWED`: existe peritaje público y no hay revisión guardada;
+- `DRAFT`: existe una revisión guardada pero aún no fue confirmada;
+- `REVIEWED`: se completaron y confirmaron las ocho dimensiones y los tres escenarios de reparación.
+
+Dimensiones manuales:
+- mecánica;
+- transmisión;
+- carrocería;
+- seguridad;
+- eléctrico;
+- llantas;
+- documentación;
+- piezas faltantes.
+
+Cada dimensión admite `LOW / MEDIUM / HIGH / CRITICAL / NOT_EVALUABLE`. `overall_risk` conserva de forma prudente la mayor severidad indicada.
+
+Escenarios manuales de reparación:
+- `repair_low_cop`;
+- `repair_base_cop`;
+- `repair_high_cop`.
+
+Se exige `low <= base <= high`. Estos valores **no se copian automáticamente** a `lot_cost_overrides.repair_cop`: para afectar la puja máxima deben registrarse y revisarse explícitamente en el módulo de costos.
+
+La revisión solo se habilita cuando el lote tiene un `PERITAJE` público. Si se selecciona una URL fuente, debe pertenecer realmente al lote. Cada guardado produce un snapshot en `lot_peritaje_review_history`.
+
+Guardrail obligatorio:
+
+`MANUAL_PERITAJE_REVIEW_NOT_AUTOMATED_DIAGNOSIS`
+
+Nueva página privada:
+`/functions/v1/superbid-dashboard/peritajes`
+
+API privada:
+- `GET /peritaje-reviews`;
+- `GET /lots/{id}/peritaje-review`.
+
+La revisión del peritaje no modifica automáticamente costos, score, puja máxima ni decisión final.
 
 ## v0.28 — lifecycle de alertas
 
@@ -211,6 +255,8 @@ Supabase/PostgreSQL consulta los endpoints públicos de Superbid mediante `http`
 - una venta exige señal explícita `offerStatus.sold=true`;
 - un cambio entre snapshots no se presenta como lance individual;
 - presión, prioridad operativa, alertas y lifecycle no son señales automáticas de compra;
+- la revisión de peritajes es manual y no se presenta como diagnóstico automático;
+- los escenarios de reparación del peritaje no se convierten automáticamente en costos económicos;
 - Fasecolda es referencia comercial, no precio de transacción;
 - Mercado Libre aporta precios pedidos, no precios vendidos;
 - no se almacena `reservedPrice`, identidad de pujadores, cookies ni filtros opacos;
@@ -254,6 +300,7 @@ pytest -q
 - [`docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md`](docs/V026_DASHBOARD_OPERATIONAL_FILTERS.md)
 - [`docs/V027_OPERATIONAL_ALERT_FEED.md`](docs/V027_OPERATIONAL_ALERT_FEED.md)
 - [`docs/V028_ALERT_LIFECYCLE.md`](docs/V028_ALERT_LIFECYCLE.md)
+- [`docs/V029_PERITAJE_REVIEW.md`](docs/V029_PERITAJE_REVIEW.md)
 - [`SECURITY.md`](SECURITY.md)
 
 La herramienta solo recolecta datos públicamente accesibles o autorizados. No evade CAPTCHA, autenticación, controles de acceso ni rate limits.
