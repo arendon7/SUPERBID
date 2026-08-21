@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +30,9 @@ def test_pressure_rpc_is_private():
 def test_private_api_exposes_pressure_endpoint():
     assert "/bid-pressure" in API
     assert "dashboard_bid_pressure" in API
-    assert 'version:"0.24"' in API
+    match = re.search(r'version:"(\d+)\.(\d+)"', API)
+    assert match is not None
+    assert tuple(map(int, match.groups())) >= (0, 24)
 
 
 def test_dashboard_keeps_pressure_separate_from_final_decision():
