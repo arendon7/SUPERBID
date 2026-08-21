@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OAUTH = (ROOT / "supabase/migrations/20260820224253_mercadolibre_oauth_v18.sql").read_text(encoding="utf-8")
 PIPE = (ROOT / "supabase/migrations/20260821042638_market_comparable_pipeline_v18.sql").read_text(encoding="utf-8")
 FINAL = (ROOT / "supabase/migrations/20260821042913_market_validated_opportunity_v18.sql").read_text(encoding="utf-8")
+GUARD = (ROOT / "supabase/migrations/20260821043520_market_queue_trigger_guard_v18.sql").read_text(encoding="utf-8")
 EDGE = (ROOT / "supabase/functions/meli-oauth/index.ts").read_text(encoding="utf-8")
 
 
@@ -47,6 +48,13 @@ def test_market_pipeline_does_not_persist_sensitive_seller_identity():
     assert "email" not in low
     assert "reservedprice" not in low
     assert "winnerbid" not in low
+
+
+def test_market_queue_only_requeues_on_real_identity_change():
+    low = GUARD.lower()
+    assert "new.title is not distinct from old.title" in low
+    assert "new.model_year is not distinct from old.model_year" in low
+    assert "v_status:=case when v_conn='ready' then 'pending' else 'auth_required' end" in low
 
 
 def test_final_decision_requires_market_and_cost_review():
