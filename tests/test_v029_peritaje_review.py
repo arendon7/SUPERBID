@@ -36,7 +36,7 @@ def test_manual_risk_dimensions_and_repair_scenarios_are_structured():
 def test_peritaje_guardrail_is_explicit_and_not_automated_diagnosis():
     guard = "manual_peritaje_review_not_automated_diagnosis"
     assert guard in MIG
-    assert guard in API
+    assert "interpretation" in API and "dashboard_peritaje_review_current" in API
     assert guard in DASH
 
 
@@ -53,8 +53,8 @@ def test_dashboard_exposes_peritaje_queue_and_form():
     assert "/superbid-dashboard/peritajes" in DASH
     assert "revisión de peritajes" in DASH
     assert "revisión estructurada del peritaje" in DASH
-    assert 'name="mechanical_risk"' in DASH
-    assert 'name="repair_base_cop"' in DASH
+    assert 'riskselect("mechanical_risk"' in DASH
+    assert 'input("repair_base_cop"' in DASH
     assert "guardar y marcar revisado" in DASH
 
 
