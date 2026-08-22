@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260822042324_fasecolda_year_case_disposition_v40.sql").read_text(encoding="utf-8").lower()
@@ -58,4 +57,4 @@ def test_dashboard_v040_remains_server_rendered_and_versioned():
     assert "<script" not in DASH
     assert "deno.serve" in DASH
     assert "superbid · v0.40" in DASH
-    assert re.search(r"method=\\\"post\\\"", DASH)
+    assert 'method="post"' in DASH
