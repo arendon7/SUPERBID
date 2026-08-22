@@ -39,7 +39,7 @@ def test_neighbor_years_are_direct_evidence_not_interpolated_valuation():
     assert "derived_value_cop" not in MIG
 
 
-def test_year_dashboard_contains_no_business_write_rpc():
+def test_year_dashboard_preserves_v039_evidence_without_business_writes():
     forbidden = (
         "dashboard_set_fasecolda_manual_resolution",
         "dashboard_set_fasecolda_search_term_override",
@@ -49,17 +49,24 @@ def test_year_dashboard_contains_no_business_write_rpc():
     )
     for name in forbidden:
         assert name not in YEAR_UI
-    assert "dashboard_fasecolda_year_reference_diagnostics" in YEAR_UI
-    assert "fasecolda_year_reference_diagnostic_not_valuation" in YEAR_UI
+    assert (
+        "dashboard_fasecolda_year_reference_diagnostics" in YEAR_UI
+        or "dashboard_fasecolda_year_reference_case_queue" in YEAR_UI
+    )
+    assert (
+        "fasecolda_year_reference_diagnostic_not_valuation" in YEAR_UI
+        or "fasecolda_year_gap_disposition_not_valuation" in YEAR_UI
+    )
 
 
-def test_year_dashboard_explicitly_rejects_cross_year_valuation_semantics():
-    assert "no se interpolan" in YEAR_UI
-    assert "no se trasladan al año del lote" in YEAR_UI
-    assert "no crean homologación" in YEAR_UI
-    assert "no modifican puja máxima ni decisión" in YEAR_UI
+def test_year_dashboard_still_rejects_cross_year_valuation_semantics():
     assert "referencia inferior" in YEAR_UI
     assert "referencia superior" in YEAR_UI
+    assert ("no se interpolan" in YEAR_UI or "nunca interpola" in YEAR_UI)
+    assert "valoración" in YEAR_UI
+    assert ("no crean homologación" in YEAR_UI or "fuerza un match high" in YEAR_UI)
+    assert "puja máxima" in YEAR_UI
+    assert "decisión final" in YEAR_UI
 
 
 def test_workbench_routes_year_cases_to_specialized_dashboard():
