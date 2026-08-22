@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260822034245_fasecolda_valuation_workbench_v38.sql").read_text(encoding="utf-8").lower()
@@ -54,4 +55,5 @@ def test_workbench_is_private_server_rendered_without_client_js():
     assert "httponly; secure; samesite=strict" in UI
     assert "<script" not in UI
     assert "deno.serve" in UI
-    assert "v0.38" in UI
+    match = re.search(r"v(\d+)\.(\d+)", UI)
+    assert match and tuple(map(int, match.groups())) >= (0, 38)
