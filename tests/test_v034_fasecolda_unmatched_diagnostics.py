@@ -15,7 +15,7 @@ def test_v034_is_read_only_diagnostic_layer():
 def test_compound_search_term_suggestion_is_conservative():
     assert "fasecolda_suggest_search_term" in MIG
     assert "regexp_replace(coalesce(p_title,''),'\\[[^\\]]+\\]'" in MIG
-    assert "max_model_words := 2" in MIG
+    assert "max_model_words integer := 2" in MIG
     assert "w='new'" in MIG
     assert "max_model_words := 3" in MIG
     for stop in ("'cc'", "'mt'", "'at'", "'tp'", "'td'", "'4x2'", "'4x4'"):
