@@ -69,7 +69,7 @@ select
     when ud.diagnostic_reason='NO_YEAR_COMPATIBLE_REFERENCE' and yrs.disposition_action='REQUEST_SOURCE_REFRESH' then 'Existe una solicitud humana de actualización de la fuente Fasecolda.'
     when ud.diagnostic_reason='NO_MATCH_ROW' then 'No existe fila de match; revisar término y fuente pública.'
     when ud.diagnostic_reason='PUBLIC_SEARCH_RETURNED_NO_CODES' then 'La búsqueda pública no devolvió códigos para el término actual.'
-    when ud.diagnostic_reason='NO_YEAR_COMPATIBLE_REFERENCE' and yrs.disposition_action='CONFIRM_COVERAGE_GAP' and ylc.evidence_review_status='DISPOSITION_CURRENT' then 'Gap de cobertura confirmado para el fingerprint vigente; no requiere repetición hasta que cambie la evidencia, pero el readiness económico sigue bloqueado.'
+    when ud.diagnostic_reason='NO_YEAR_COMPATIBLE_REFERENCE' and yrs.disposition_action='CONFIRM_COVERAGE_GAP' and ylc.evidence_review_status='DISPOSITION_CURRENT' then 'Gap de cobertura confirmado para el fingerprint vigente; no requiere repetición hasta que cambie la evidencia, pero sigue bloqueado económicamente y el readiness no avanza.'
     when ud.diagnostic_reason='NO_YEAR_COMPATIBLE_REFERENCE' then 'Hay códigos/candidatos, pero no referencia utilizable para el año del vehículo.'
     else 'Bloqueo de valoración no cubierto por un workflow especializado.'
   end as triage_reason,
@@ -102,4 +102,4 @@ revoke all on public.dashboard_fasecolda_valuation_workbench from public,anon,au
 grant select on public.dashboard_fasecolda_valuation_workbench to service_role;
 
 comment on view public.dashboard_fasecolda_valuation_workbench is
-'Human valuation triage. v0.43 uses Fasecolda year-evidence lifecycle only to prioritize workflow. Confirmed unchanged gaps are deprioritized but remain economically blocked. Lifecycle never creates a match or valuation.';
+'Human valuation triage. v0.43 uses Fasecolda year-evidence lifecycle only to prioritize workflow. Confirmed unchanged gaps are deprioritized, pero siguen bloqueados económicamente. Lifecycle never creates a match or valuation.';
