@@ -2,10 +2,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DASH = (ROOT / "supabase/functions/superbid-readiness-dashboard/index.ts").read_text(encoding="utf-8").lower()
+V46 = (ROOT / "supabase/migrations/20260825200000_due_diligence_fasecolda_provenance_v46.sql").read_text(encoding="utf-8").lower()
 
 
-def test_readiness_dashboard_reads_single_v031_contract():
-    assert "dashboard_economic_readiness_current" in DASH
+def test_readiness_dashboard_preserves_v031_contract_through_canonical_due_diligence_view():
+    # v0.46 no recomputes economic readiness in the UI. The canonical due-
+    # diligence view is explicitly derived from the v0.31 readiness contract.
+    assert "dashboard_due_diligence_queue" in DASH
+    assert "dashboard_economic_readiness_current r" in V46
     assert "blocker_count.asc" in DASH
     assert "review_score.desc" in DASH
     assert "closes_at.asc" in DASH
@@ -30,12 +34,12 @@ def test_dashboard_exposes_blockers_and_next_action_filters():
         assert action in DASH
 
 
-def test_next_actions_link_to_existing_human_workflows():
+def test_next_actions_link_to_current_human_workflows():
     assert "/functions/v1/superbid-dashboard/lots/" in DASH
     assert "#peritaje" in DASH
-    assert "#costs" in DASH
+    assert "/functions/v1/superbid-market-review-dashboard/lots/" in DASH
+    assert "/functions/v1/superbid-cost-governance-dashboard/lots/" in DASH
     assert "/functions/v1/superbid-dashboard/peritajes" in DASH
-    assert "/functions/v1/superbid-dashboard/costos" in DASH
 
 
 def test_visual_board_is_read_only_for_business_data():
