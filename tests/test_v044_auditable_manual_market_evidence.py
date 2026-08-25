@@ -62,13 +62,25 @@ def test_draft_cannot_become_effective_market_validation():
 def test_effective_market_evidence_preserves_origin_and_ready_precedence():
     sql = migration()
     assert "create or replace view public.market_valuation_effective_current" in sql
-    assert "'MERCADOLIBRE_AUTHENTICATED'::text as evidence_origin" in sql
+    assert "'MERCADOLIBRE_PIPELINE'::text as evidence_origin" in sql
     assert "'MANUAL_REVIEWED'::text as evidence_origin" in sql
     assert "case status when 'READY' then 0" in sql
     assert "observed_at desc nulls last" in sql
     assert "market_evidence_origin" in sql
     assert "market_evidence_fingerprint" in sql
     assert "case when mv.status='READY' and mv.comparable_count>=3 then true else false end market_validation_available" in sql
+
+
+def test_existing_market_intelligence_column_order_is_preserved_and_provenance_appended():
+    sql = migration()
+    view = sql.split("create or replace view public.lot_market_intelligence_current as", 1)[1]
+    view = view.split("revoke all on public.lot_market_intelligence_current", 1)[0]
+    assert "mv.status market_status" in view
+    assert "mv.comparable_count market_comparable_count_live" in view
+    assert "market_validation_available," in view
+    assert view.index("mv.status market_status") < view.index("market_validation_available")
+    assert view.index("market_validation_available") < view.index("mv.source as market_validation_source")
+    assert view.index("mv.source as market_validation_source") < view.index("mv.evidence_origin as market_evidence_origin")
 
 
 def test_conservative_resale_still_caps_market_evidence_by_fasecolda():
@@ -91,16 +103,18 @@ def test_manual_evidence_rpc_never_grants_a_buy_signal_or_writes_other_decision_
     assert "expected_roi_current_pct=" not in rpc
 
 
-def test_market_review_queue_is_readiness_scoped_and_not_a_buy_signal():
+def test_market_review_queue_is_readiness_scoped_and_exposes_lot_year():
     sql = migration()
     assert "create or replace view public.dashboard_market_review_queue_v44" in sql
+    assert "l.model_year" in sql
+    assert "join public.auction_lots l on l.id=r.lot_id" in sql
     assert "r.readiness_status='BLOCKED'" in sql
     assert "r.blockers @> array['MARKET_NOT_VALIDATED']::text[]" in sql
     assert "'MARKET_REVIEW_NOT_BUY_SIGNAL'::text as interpretation" in sql
     assert "revoke all on public.dashboard_market_review_queue_v44 from public,anon,authenticated" in sql
 
 
-def test_private_dashboard_uses_custom_auth_server_side_and_only_review_post_mutates_business_data():
+def test_private_dashboard_uses_custom_auth_live_connection_and_only_review_post_mutates_business_data():
     ts = dashboard()
     assert "dashboard_token_valid" in ts
     assert "HttpOnly; Secure; SameSite=Strict" in ts
@@ -110,6 +124,11 @@ def test_private_dashboard_uses_custom_auth_server_side_and_only_review_post_mut
     assert "dashboard_save_manual_market_evidence" in ts
     assert "REVIEWED requiere al menos 3 comparables" in ts
     assert "URL | PRECIO_COP | AÑO | TÍTULO | CIUDAD" in ts
+    assert "async function marketConnection()" in ts
+    assert "market_connections?select=source,status,access_expires_at,updated_at,last_error" in ts
+    assert '"OAuth Mercado Libre","APP_REQUIRED"' not in ts
+    assert "model_year" in ts
+    assert "Año obligatorio del lote" in ts
     # The visible guardrail intentionally contains NOT_BUY_SIGNAL. What must not
     # exist in the dashboard is a mutable/business payload field named buy_signal.
     assert '"buy_signal"' not in ts.lower()
