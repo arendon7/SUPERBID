@@ -182,3 +182,15 @@ Antes de producción se exige:
 - nuevas columnas de provenance agregadas únicamente al final;
 - migración y Edge Function desplegadas solo después del merge;
 - verificación posterior de esquema y semántica de readiness.
+
+## Certificación de código previa al merge
+
+Candidato certificado:
+
+`2e852d9a48e790aad68e9d1397410b1fd4244bbd`
+
+- Python 3.12;
+- suite completa: `242/242 PASS`;
+- `behind_by = 0` contra `main` en el momento de certificación;
+- diff acotado a seis archivos de v0.44;
+- esquema productivo inspeccionado: 67 columnas existentes en `lot_market_intelligence_current`, preservadas en orden antes de las cinco nuevas columnas de provenance.
