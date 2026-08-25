@@ -48,8 +48,8 @@ def test_dashboard_is_private_and_server_rendered():
     assert 'req.method!=="get"' in UI
 
 
-def test_dashboard_v042_routes_and_filters_are_explicit():
-    assert "superbid · v0.42" in UI
+def test_dashboard_v042_routes_and_filters_survive_forward_versions():
+    assert "lifecycle de evidencia fasecolda" in UI
     assert 'name="review"' in UI
     assert 'name="event"' in UI
     assert 'name="reason"' in UI
