@@ -53,8 +53,9 @@ def test_dashboard_groups_cases_and_requires_explicit_post_action():
     assert "casos idénticos se agrupan" in DASH
 
 
-def test_dashboard_v040_remains_server_rendered_and_versioned():
+def test_dashboard_v040_capability_remains_server_rendered_and_post_only():
     assert "<script" not in DASH
     assert "deno.serve" in DASH
-    assert "superbid · v0.40" in DASH
+    assert "casos fasecolda por año" in DASH
     assert 'method="post"' in DASH
+    assert "dashboard_set_fasecolda_year_reference_case_disposition" in DASH
