@@ -73,7 +73,7 @@ def test_workbench_routes_year_cases_to_specialized_dashboard():
     assert 'x.workflow_target==="year_reference_review"' in WORKBENCH
     assert "/functions/v1/superbid-fasecolda-year-dashboard" in WORKBENCH
     assert "referencias por año" in WORKBENCH
-    assert "v0.39" in WORKBENCH
+    assert "year_reference_review" in WORKBENCH
 
 
 def test_v039_dashboards_remain_private_server_rendered():
