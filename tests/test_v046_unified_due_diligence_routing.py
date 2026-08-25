@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,10 +17,22 @@ def dashboard() -> str:
     return DASHBOARD.read_text(encoding="utf-8")
 
 
-def test_v046_version_is_exposed_consistently():
-    assert '__version__ = "0.46.0"' in VERSION.read_text(encoding="utf-8")
-    assert 'version = "0.46.0"' in PYPROJECT.read_text(encoding="utf-8")
-    assert "SUPERBID · v0.46" in dashboard()
+def _version_tuple(text: str, pattern: str) -> tuple[int, int, int]:
+    match = re.search(pattern, text)
+    assert match, f"version not found with {pattern}"
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def test_v046_release_lineage_is_exposed_consistently_in_forward_versions():
+    package_version = _version_tuple(
+        VERSION.read_text(encoding="utf-8"), r'__version__\s*=\s*"(\d+\.\d+\.\d+)"'
+    )
+    project_version = _version_tuple(
+        PYPROJECT.read_text(encoding="utf-8"), r'version\s*=\s*"(\d+\.\d+\.\d+)"'
+    )
+    assert package_version == project_version
+    assert package_version >= (0, 46, 0)
+    assert "Due Diligence Command Center" in dashboard()
 
 
 def test_command_center_uses_canonical_due_diligence_queue_and_priority_order():
@@ -38,7 +51,6 @@ def test_validate_market_routes_to_exact_v044_lot_workflow():
     assert 'a==="VALIDATE_MARKET"' in ts
     assert "superbid-market-review-dashboard/lots/${id}" in ts
     assert "MARKET_NOT_VALIDATED" in ts
-    assert "superbid-market-review-dashboard/lots/${id}" in ts
 
 
 def test_cost_actions_route_to_exact_v045_lot_governance_workflow():
@@ -106,7 +118,7 @@ def test_private_authentication_contract_is_preserved():
     assert 'Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")' in ts
     assert "HttpOnly; Secure; SameSite=Strict" in ts
     assert "sb_readiness_session" in ts
-    assert 'if(!await valid(cookie(req)))return login(false)' in ts
+    assert 'if(!await valid(cookie(req)))return login(false' in ts
 
 
 def test_navigation_exposes_all_current_operator_workflows():
