@@ -17,11 +17,11 @@ def dashboard() -> str:
 
 
 def test_v044_release_artifacts_remain_identifiable_after_later_versions():
-    # Historical-wave tests must protect the v0.44 artifacts and contract, not
-    # freeze the repository's global package version forever.
+    # Historical-wave tests protect the v0.44 artifacts and contract, not
+    # freeze the mutable UI version label forever.
     assert MIGRATION.exists()
     assert DASHBOARD.exists()
-    assert "SUPERBID · v0.44" in dashboard()
+    assert "Auditable Market Evidence" in dashboard()
     assert "MANUAL_MARKET_EVIDENCE_NOT_AUTOMATIC_VALUATION" in migration()
     assert "MARKET_REVIEW_NOT_BUY_SIGNAL" in migration()
 
