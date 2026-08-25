@@ -36,7 +36,7 @@ def test_v043_keeps_private_backend_access():
 
 
 def test_workbench_exposes_lifecycle_and_routes_known_gaps():
-    assert "superbid · v0.43" in UI
+    assert "fasecolda valuation workbench" in UI
     assert "year_evidence_review_status" in UI
     assert "year_evidence_event_type" in UI
     assert "year_lifecycle_next_action" in UI
