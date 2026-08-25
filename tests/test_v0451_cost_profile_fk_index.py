@@ -5,13 +5,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260825150000_cost_profile_fk_index_v451.sql"
 V45 = ROOT / "supabase/migrations/20260825040000_cost_assumption_governance_v45.sql"
-VERSION = ROOT / "src/superbid_collector/__init__.py"
-PYPROJECT = ROOT / "pyproject.toml"
 
 
-def test_v0451_version_is_exposed_consistently():
-    assert '__version__ = "0.45.1"' in VERSION.read_text(encoding="utf-8")
-    assert 'version = "0.45.1"' in PYPROJECT.read_text(encoding="utf-8")
+def test_v0451_release_artifact_remains_identifiable_after_later_versions():
+    # Patch-release tests protect the migration and v0.45.1 contract rather
+    # than permanently pinning the repository's global package version.
+    assert MIGRATION.exists()
+    sql = MIGRATION.read_text(encoding="utf-8")
+    assert "ix_lot_cost_profile_application_profile" in sql
+    assert "profile_version_id" in sql
 
 
 def test_v0451_adds_covering_index_for_profile_version_fk_only():
