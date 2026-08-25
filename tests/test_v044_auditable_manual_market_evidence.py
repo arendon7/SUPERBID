@@ -110,7 +110,10 @@ def test_private_dashboard_uses_custom_auth_server_side_and_only_review_post_mut
     assert "dashboard_save_manual_market_evidence" in ts
     assert "REVIEWED requiere al menos 3 comparables" in ts
     assert "URL | PRECIO_COP | AÑO | TÍTULO | CIUDAD" in ts
-    assert "buy_signal" not in ts.lower()
+    # The visible guardrail intentionally contains NOT_BUY_SIGNAL. What must not
+    # exist in the dashboard is a mutable/business payload field named buy_signal.
+    assert '"buy_signal"' not in ts.lower()
+    assert "'buy_signal'" not in ts.lower()
     assert "lot_fasecolda_matches" not in ts
     assert "dashboard_save_lot_costs" not in ts
 
