@@ -95,14 +95,16 @@ La regla coincide conceptualmente con el motor de mercado existente y mantiene e
 
 `market_valuation_effective_current` combina dos orígenes explícitos:
 
-- `MERCADOLIBRE_AUTHENTICATED`;
+- `MERCADOLIBRE_PIPELINE`;
 - `MANUAL_REVIEWED`.
+
+`MERCADOLIBRE_PIPELINE` describe el origen técnico de filas de `market_valuations` sin afirmar que la conexión esté actualmente autenticada; el estado vivo continúa en `market_connections`.
 
 La vista prioriza evidencia `READY`; entre evidencias READY usa la más reciente y conserva `evidence_origin`.
 
 Un DRAFT nunca entra a la vista manual efectiva.
 
-`lot_market_intelligence_current` sigue exponiendo:
+`lot_market_intelligence_current` sigue exponiendo, en el mismo orden pre-v0.44:
 
 - `market_status`;
 - número de comparables;
@@ -111,13 +113,15 @@ Un DRAFT nunca entra a la vista manual efectiva.
 - confianza;
 - `market_validation_available`.
 
-Y añade provenance:
+Y añade **al final** provenance:
 
 - `market_validation_source`;
 - `market_evidence_origin`;
 - `market_evidence_set_id`;
 - `market_evidence_fingerprint`;
 - `market_evidence_observed_at`.
+
+Esto preserva las 67 columnas preexistentes y evita romper vistas dependientes por cambio de posición.
 
 La reventa conservadora continúa limitada por Fasecolda cuando ambas evidencias existen:
 
@@ -150,6 +154,8 @@ La interfaz:
 - usa `dashboard_token_valid` y cookie `HttpOnly; Secure; SameSite=Strict`;
 - lista lotes bloqueados por `MARKET_NOT_VALIDATED`;
 - prioriza menos blockers, mayor review score y cierre;
+- muestra explícitamente `model_year` del lote;
+- lee el estado vivo de `market_connections` para Mercado Libre, sin hardcodear `APP_REQUIRED`;
 - permite guardar DRAFT o REVIEWED;
 - acepta una línea por comparable:
 
@@ -162,6 +168,17 @@ La interfaz:
 
 ## Mercado Libre
 
-v0.44 **no elimina** el pipeline OAuth de Mercado Libre. Cuando exista una aplicación autorizada, `market_valuations` volverá a producir evidencia `MERCADOLIBRE_AUTHENTICATED` y competirá en la vista efectiva según status y vigencia.
+v0.44 **no elimina** el pipeline OAuth de Mercado Libre. Cuando exista una aplicación autorizada, `market_valuations` volverá a producir evidencia por el pipeline automático y competirá en la vista efectiva según status y vigencia.
 
 La evidencia manual es un camino auditable de continuidad operacional, no un bypass opaco.
+
+## Gate de despliegue
+
+Antes de producción se exige:
+
+- CI completo verde sobre el HEAD exacto;
+- `behind_by = 0` contra `main`;
+- conservación del orden de las 67 columnas productivas actuales de `lot_market_intelligence_current`;
+- nuevas columnas de provenance agregadas únicamente al final;
+- migración y Edge Function desplegadas solo después del merge;
+- verificación posterior de esquema y semántica de readiness.
