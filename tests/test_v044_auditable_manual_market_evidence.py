@@ -5,8 +5,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260825030000_auditable_manual_market_evidence_v44.sql"
 DASHBOARD = ROOT / "supabase/functions/superbid-market-review-dashboard/index.ts"
-VERSION = ROOT / "src/superbid_collector/__init__.py"
-PYPROJECT = ROOT / "pyproject.toml"
 V43 = ROOT / "supabase/migrations/20260822044324_fasecolda_workbench_lifecycle_triage_v43.sql"
 
 
@@ -18,10 +16,14 @@ def dashboard() -> str:
     return DASHBOARD.read_text(encoding="utf-8")
 
 
-def test_v044_version_is_exposed_consistently():
-    assert '__version__ = "0.44.0"' in VERSION.read_text(encoding="utf-8")
-    assert 'version = "0.44.0"' in PYPROJECT.read_text(encoding="utf-8")
+def test_v044_release_artifacts_remain_identifiable_after_later_versions():
+    # Historical-wave tests must protect the v0.44 artifacts and contract, not
+    # freeze the repository's global package version forever.
+    assert MIGRATION.exists()
+    assert DASHBOARD.exists()
     assert "SUPERBID · v0.44" in dashboard()
+    assert "MANUAL_MARKET_EVIDENCE_NOT_AUTOMATIC_VALUATION" in migration()
+    assert "MARKET_REVIEW_NOT_BUY_SIGNAL" in migration()
 
 
 def test_manual_market_evidence_is_immutable_auditable_and_backend_only():
