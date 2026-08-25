@@ -180,7 +180,7 @@ create or replace view public.market_valuation_effective_current as
 with candidates as(
   select mv.lot_id,mv.source,mv.status,mv.search_term,mv.comparable_count,mv.median_asking_cop,mv.p25_asking_cop,mv.p75_asking_cop,
     mv.quick_sale_cop,mv.dispersion_pct,mv.confidence,mv.observed_at,mv.note,null::bigint as evidence_set_id,null::text as evidence_fingerprint,
-    'MERCADOLIBRE_AUTHENTICATED'::text as evidence_origin
+    'MERCADOLIBRE_PIPELINE'::text as evidence_origin
   from public.market_valuations mv
   union all
   select lot_id,source,status,search_term,comparable_count,median_asking_cop,p25_asking_cop,p75_asking_cop,quick_sale_cop,
@@ -199,20 +199,22 @@ from ranked where rn=1;
 revoke all on public.market_valuation_effective_current from public,anon,authenticated;
 grant select on public.market_valuation_effective_current to service_role;
 
+-- Preserve every pre-v0.44 column in the exact existing order so dependent views keep stable attnums.
+-- New provenance columns are appended only after market_validation_available.
 create or replace view public.lot_market_intelligence_current as
 select o.*,
-  mv.source as market_validation_source,
-  mv.evidence_origin as market_evidence_origin,
-  mv.evidence_set_id as market_evidence_set_id,
-  mv.evidence_fingerprint as market_evidence_fingerprint,
-  mv.observed_at as market_evidence_observed_at,
   mv.status market_status,
   mv.comparable_count market_comparable_count_live,
   mv.median_asking_cop,mv.p25_asking_cop,mv.p75_asking_cop,mv.quick_sale_cop market_quick_sale_cop,
   mv.dispersion_pct market_dispersion_pct,mv.confidence market_confidence,
   case when mv.status='READY' and mv.quick_sale_cop is not null and o.fasecolda_current_cop is not null
     then least(mv.quick_sale_cop,round(o.fasecolda_current_cop*0.95)::bigint) end conservative_resale_market_validated_cop,
-  case when mv.status='READY' and mv.comparable_count>=3 then true else false end market_validation_available
+  case when mv.status='READY' and mv.comparable_count>=3 then true else false end market_validation_available,
+  mv.source as market_validation_source,
+  mv.evidence_origin as market_evidence_origin,
+  mv.evidence_set_id as market_evidence_set_id,
+  mv.evidence_fingerprint as market_evidence_fingerprint,
+  mv.observed_at as market_evidence_observed_at
 from public.lot_opportunity_preliminary o
 left join public.market_valuation_effective_current mv on mv.lot_id=o.lot_id;
 revoke all on public.lot_market_intelligence_current from public,anon,authenticated;
@@ -220,7 +222,7 @@ grant select on public.lot_market_intelligence_current to service_role;
 
 create or replace view public.dashboard_market_review_queue_v44 as
 select
-  r.external_lot_id,r.lot_id,r.title,r.city,r.seller,r.current_bid_cop,r.closes_at,r.hours_to_close,r.review_state,r.review_score,
+  r.external_lot_id,r.lot_id,r.title,l.model_year,r.city,r.seller,r.current_bid_cop,r.closes_at,r.hours_to_close,r.review_state,r.review_score,
   r.readiness_status,r.next_action,r.blocker_count,r.blockers,r.fasecolda_status,
   ev.status as effective_market_status,ev.evidence_origin as market_evidence_origin,ev.comparable_count as market_comparable_count,
   ev.p25_asking_cop,ev.quick_sale_cop,ev.confidence as market_confidence,ev.observed_at as market_observed_at,
@@ -228,6 +230,7 @@ select
   mm.observed_at as manual_reviewed_at,
   'MARKET_REVIEW_NOT_BUY_SIGNAL'::text as interpretation
 from public.dashboard_economic_readiness_current r
+join public.auction_lots l on l.id=r.lot_id
 left join public.market_valuation_effective_current ev on ev.lot_id=r.lot_id
 left join public.market_manual_valuation_current mm on mm.lot_id=r.lot_id
 where r.readiness_status='BLOCKED' and r.blockers @> array['MARKET_NOT_VALIDATED']::text[];
@@ -236,5 +239,5 @@ grant select on public.dashboard_market_review_queue_v44 to service_role;
 
 comment on table public.market_manual_evidence_sets is 'Immutable manual market-evidence submissions. REVIEWED requires >=3 same-year HTTPS comparables; evidence is not a buy signal.';
 comment on function public.dashboard_save_manual_market_evidence(text,jsonb,text,boolean) is 'Stores auditable manual market evidence. Never writes Fasecolda, costs, bid, ROI or final decision directly.';
-comment on view public.market_valuation_effective_current is 'Effective market evidence preserving origin. READY evidence may be authenticated Mercado Libre or explicitly MANUAL_REVIEWED.';
+comment on view public.market_valuation_effective_current is 'Effective market evidence preserving origin. READY evidence may come from the Mercado Libre pipeline or explicitly MANUAL_REVIEWED evidence.';
 comment on view public.dashboard_market_review_queue_v44 is 'Human market evidence queue. MARKET_REVIEW_NOT_BUY_SIGNAL.';
