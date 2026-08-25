@@ -18,10 +18,10 @@ def dashboard() -> str:
 
 def test_v045_release_artifacts_remain_identifiable_after_patch_releases():
     # Historical release tests protect the v0.45 contract/artifacts, not the
-    # repository's mutable global package version.
+    # mutable UI version label forever.
     assert MIGRATION.exists()
     assert DASHBOARD.exists()
-    assert "SUPERBID · v0.45" in dashboard()
+    assert "Cost Assumption Governance" in dashboard()
     sql = migration()
     assert "COST_PROFILE_ASSUMPTION_NOT_LOT_COST" in sql
     assert "COST_PROFILE_APPLICATION_REQUIRES_LOT_CONFIRMATION" in sql
@@ -168,13 +168,24 @@ def test_private_dashboard_has_server_side_auth_no_bulk_apply_and_custom_escape_
     assert "deal_profiles" not in ts
 
 
-def test_profile_application_post_must_not_redirect_to_queue_only_lot_page_after_review():
+def test_profile_application_post_is_completion_safe_after_review():
     ts = dashboard()
     apply = ts.split("async function applyProfile", 1)[1]
     apply = apply.split("Deno.serve", 1)[0]
     assert "dashboard_apply_cost_profile_to_lot" in apply
-    assert "superbid-cost-governance-dashboard?saved=applied" in apply or "superbid-dashboard/lots/${external}" in apply
-    assert "superbid-cost-governance-dashboard/lots/${external}?saved=1" not in apply
+    assert "reviewed?`/functions/v1/superbid-readiness-dashboard?lot=${encodeURIComponent(external)}`" in apply
+    assert "superbid-cost-governance-dashboard/lots/${encodeURIComponent(external)}?saved=1" in apply
+    assert "COMPLETION_ROUTING_NOT_BUY_SIGNAL" in ts
+
+
+def test_profile_creation_preserves_case_without_implicit_application():
+    ts = dashboard()
+    assert 'name="return_lot"' in ts
+    assert "safeLot(f.get(\"return_lot\"))" in ts
+    assert "superbid-cost-governance-dashboard/lots/${encodeURIComponent(returnLot)}" in ts
+    save = ts.split("async function saveProfile", 1)[1].split("async function applyProfile", 1)[0]
+    assert "dashboard_save_cost_assumption_profile" in save
+    assert "dashboard_apply_cost_profile_to_lot" not in save
 
 
 def test_v045_preserves_v044_market_evidence_guardrails():
