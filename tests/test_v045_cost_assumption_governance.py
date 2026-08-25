@@ -5,8 +5,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260825040000_cost_assumption_governance_v45.sql"
 DASHBOARD = ROOT / "supabase/functions/superbid-cost-governance-dashboard/index.ts"
-VERSION = ROOT / "src/superbid_collector/__init__.py"
-PYPROJECT = ROOT / "pyproject.toml"
 V44 = ROOT / "supabase/migrations/20260825030000_auditable_manual_market_evidence_v44.sql"
 
 
@@ -18,10 +16,15 @@ def dashboard() -> str:
     return DASHBOARD.read_text(encoding="utf-8")
 
 
-def test_v045_version_is_exposed_consistently():
-    assert '__version__ = "0.45.0"' in VERSION.read_text(encoding="utf-8")
-    assert 'version = "0.45.0"' in PYPROJECT.read_text(encoding="utf-8")
+def test_v045_release_artifacts_remain_identifiable_after_later_versions():
+    # Historical-wave tests protect the v0.45 artifacts and safety contract,
+    # not the repository's global package version forever.
+    assert MIGRATION.exists()
+    assert DASHBOARD.exists()
     assert "SUPERBID · v0.45" in dashboard()
+    assert "COST_PROFILE_ASSUMPTION_NOT_LOT_COST" in migration()
+    assert "COST_PROFILE_APPLICATION_REQUIRES_LOT_CONFIRMATION" in migration()
+    assert "COST_GOVERNANCE_NOT_BUY_SIGNAL" in migration()
 
 
 def test_cost_profiles_are_immutable_backend_only_assumptions():
