@@ -66,14 +66,25 @@ v0.46 es deliberadamente read-only respecto de datos de negocio.
 
 No crea:
 
-- migraciones;
-- tablas;
-- RPCs;
+- tablas de negocio;
+- RPCs de escritura;
 - overrides;
 - evidencia de mercado;
 - costos;
 - matches Fasecolda;
 - decisiones.
+
+Sí incluye una migración **exclusivamente de contrato de lectura**:
+
+`20260825200000_due_diligence_fasecolda_provenance_v46.sql`
+
+Esta migración hace `create or replace view` sobre `dashboard_due_diligence_queue` para anexar al final del contrato tres campos de proveniencia que ya existen en readiness:
+
+- `fasecolda_match_origin`;
+- `fasecolda_automatic_status`;
+- `fasecolda_match_interpretation`.
+
+Los primeros 40 campos, el ranking, los blockers, el readiness y la autoridad económica permanecen intactos. La vista sigue revocada para `public`, `anon` y `authenticated`, y disponible únicamente para `service_role`.
 
 El dashboard consulta:
 
@@ -168,15 +179,15 @@ El dashboard mantiene el patrón privado existente:
 - cookie `HttpOnly; Secure; SameSite=Strict`;
 - navegador sin acceso al service role.
 
-v0.46 no agrega superficie de escritura.
+v0.46 no agrega superficie de escritura de negocio.
 
 ## Navegación
 
 La cabecera del command center expone explícitamente Dashboard, Due diligence, Fasecolda, Mercado, Costos, Peritajes y Alertas.
 
-## Compatibilidad v0.45.1
+## Compatibilidad histórica
 
-v0.46 parte del `main` que ya contiene el patch v0.45.1 y su índice de FK sobre `lot_cost_profile_application_history(profile_version_id)`. Ese patch se conserva intacto. Su test histórico se hace forward-compatible para proteger la migración sin congelar la versión global del paquete.
+v0.46 parte del `main` que ya contiene el patch v0.45.1 y su índice de FK sobre `lot_cost_profile_application_history(profile_version_id)`. Ese patch se conserva intacto. Sus tests históricos y el contrato visual v0.33 se mantienen forward-compatible: la proveniencia Fasecolda continúa visible, pero `REVIEW_VALUATION` se enruta al workbench unificado actual en lugar del resolver v0.33 directo.
 
 ## Criterios de aceptación
 
@@ -187,7 +198,24 @@ v0.46 parte del `main` que ya contiene el patch v0.45.1 y su índice de FK sobre
 5. Fasecolda y peritaje conservan sus workflows propios.
 6. Los shortcuts se derivan de blockers reales.
 7. `FAST LANE` requiere exactamente los cuatro blockers permitidos.
-8. No existe ningún RPC de negocio ni write en v0.46.
-9. La autenticación privada permanece intacta.
-10. v0.45.1 permanece funcional y versionable hacia adelante.
-11. La versión del paquete es `0.46.0`.
+8. No existe ningún RPC de negocio ni write de negocio en v0.46.
+9. La migración v0.46 modifica únicamente el contrato read-only de `dashboard_due_diligence_queue` y preserva sus 40 campos previos en el mismo orden.
+10. La autenticación privada permanece intacta.
+11. v0.45.1 permanece funcional y versionable hacia adelante.
+12. La versión del paquete es `0.46.0`.
+
+## Gate de merge y despliegue
+
+Antes del merge debe cumplirse:
+
+- CI completo verde sobre el merge sintético del HEAD final;
+- rama `behind_by=0` respecto de `main`;
+- prevalidación productiva read-only del contrato actual y de los conteos relevantes;
+- validación transaccional de la migración cuando sea posible, sin dejar cambios productivos.
+
+Después del merge:
+
+1. aplicar `20260825200000_due_diligence_fasecolda_provenance_v46.sql`;
+2. verificar contrato, permisos y conteos post-migración;
+3. desplegar únicamente `superbid-readiness-dashboard`, fijado al SHA inmutable del merge;
+4. confirmar que readiness, blockers y decisiones no fueron alterados por el despliegue.
