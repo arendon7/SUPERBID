@@ -107,6 +107,8 @@ def test_private_auth_cookie_contract_is_preserved():
         assert "httponly; secure; samesite=strict" in lower
 
 
-def test_v047_package_version():
+def test_v047_package_version_is_consistent():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     assert 'version = "0.47.0"' in pyproject
+    assert '__version__ = "0.47.0"' in package
