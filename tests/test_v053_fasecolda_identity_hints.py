@@ -20,7 +20,7 @@ def version_tuple(text: str, pattern: str) -> tuple[int, int, int]:
     return tuple(int(x) for x in m.group(1).split("."))
 
 
-def test_python_and_edge_helpers_share_the_same_guardrail_and_dimensions():
+def test_python_and_edge_helpers_share_the_same_guardrail_dimensions_and_nominal_tolerance():
     guardrail = "AUTOMATED_IDENTITY_HINT_NOT_HUMAN_EVIDENCE_OR_MATCH"
     assert guardrail in PY_HINTS
     assert guardrail in EDGE_HINTS
@@ -28,6 +28,11 @@ def test_python_and_edge_helpers_share_the_same_guardrail_and_dimensions():
     for token in ("engine_cc", "transmission", "drivetrain", "fuel"):
         assert token in PY_HINTS
         assert token in EDGE_HINTS
+    assert "ENGINE_CC_NOMINAL_TOLERANCE = 50" in PY_HINTS
+    assert "ENGINE_CC_NOMINAL_TOLERANCE = 50" in EDGE_HINTS
+    assert "NOMINAL_COMPATIBLE" in PY_HINTS
+    assert "NOMINAL_COMPATIBLE" in EDGE_HINTS
+    assert "COMPATIBLE ±50 CC" in COCKPIT
 
 
 def test_existing_html_parser_reuses_canonical_cc_regex_without_persisting_new_hints():
@@ -63,7 +68,8 @@ def test_hints_are_visible_but_explicitly_not_evidence_or_ranking():
     assert "no se guardan como evidencia" in lower
     assert "no se copian a estos campos" in lower
     assert "las pistas tampoco crean un nuevo score" in lower
-    assert "coincide o difiere no equivalen a match/conflict humano" in lower
+    assert "coincide, compatible o difiere no equivalen a match/conflict humano" in lower
+    assert "compatible ±50 cc reconoce únicamente la diferencia habitual entre desplazamiento real y nominal" in lower
     assert "hint_score" not in lower
     assert "recommended_candidate" not in lower
     assert "auto_select" not in lower
@@ -99,6 +105,11 @@ def test_business_write_authority_did_not_expand_in_v053():
     }
     assert "<script" not in COCKPIT.lower()
     assert "HttpOnly; Secure; SameSite=Strict" in COCKPIT
+
+
+def test_v053_adds_no_database_migration():
+    migrations = list((ROOT / "supabase/migrations").glob("*v53*.sql"))
+    assert migrations == []
 
 
 def test_v053_package_version_is_exact_and_consistent():
