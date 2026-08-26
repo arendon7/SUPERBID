@@ -63,9 +63,9 @@ def test_v055_map_marks_duplicates_without_resolving_them():
 def test_v055_cockpit_renders_read_only_discriminator_map_outside_evidence_payload():
     lower = COCKPIT.lower()
     assert 'from "./candidate_discriminators.ts"' in COCKPIT
+    assert "candidate_discriminator_guardrail" in lower
     assert "mapa de diferencias actuales" in lower
     assert "deltas literales frente al conjunto" in lower
-    assert "candidate_discriminator_map_not_evidence_or_recommendation" in lower
     assert "${selectedreadonly}${form}" in lower
     assert 'name="disc_' not in lower
     assert 'name="token_' not in lower
