@@ -82,8 +82,6 @@ grant select,insert on public.lot_fasecolda_candidate_resolution_evidence_histor
 create index if not exists ix_fasecolda_candidate_evidence_history_lot_created
   on public.lot_fasecolda_candidate_resolution_evidence_history(lot_id,created_at desc);
 
--- No write path, including the legacy manual-resolution RPC, may create/update
--- MANUAL_CONFIRMED unless a reviewed v0.52 evidence snapshot exists and matches.
 create or replace function public.enforce_fasecolda_candidate_evidence_gate_v52()
 returns trigger
 language plpgsql
@@ -122,8 +120,6 @@ create trigger trg_fasecolda_candidate_evidence_gate_v52
 before insert or update on public.lot_fasecolda_manual_resolutions
 for each row execute function public.enforce_fasecolda_candidate_evidence_gate_v52();
 
--- CLEAR remains explicit and reversible. Removing a manual HIGH invalidates the
--- current evidence snapshot; append-only history remains for audit.
 create or replace function public.invalidate_fasecolda_candidate_evidence_after_manual_delete_v52()
 returns trigger
 language plpgsql
@@ -161,8 +157,6 @@ create trigger trg_fasecolda_candidate_evidence_manual_delete_v52
 after delete on public.lot_fasecolda_manual_resolutions
 for each row execute function public.invalidate_fasecolda_candidate_evidence_after_manual_delete_v52();
 
--- Vehicle identity mutations invalidate any draft/reviewed candidate evidence.
--- The existing v0.33 trigger separately invalidates the manual resolution.
 create or replace function public.invalidate_fasecolda_candidate_evidence_on_identity_change_v52()
 returns trigger
 language plpgsql
@@ -207,9 +201,6 @@ create trigger trg_fasecolda_candidate_evidence_identity_change_v52
 after update of title,brand,line,model_year on public.auction_lots
 for each row execute function public.invalidate_fasecolda_candidate_evidence_on_identity_change_v52();
 
--- Human evidence contract. DRAFT may be incomplete and never changes the
--- effective Fasecolda match. REVIEWED requires all six dimensions, no conflict,
--- line MATCH and at least one discriminating MATCH beyond line identity.
 create or replace function public.dashboard_save_fasecolda_candidate_resolution(
   p_external_lot_id text,
   p_code text,
@@ -234,6 +225,8 @@ declare
   v_note text;
   v_observed text;
   v_source text;
+  v_discriminates_text text;
+  v_discriminates boolean;
   v_complete smallint:=0;
   v_matches smallint:=0;
   v_conflicts smallint:=0;
@@ -280,6 +273,7 @@ begin
   if v_candidate.lot_id is null then raise exception 'selected code is not a current candidate for this lot'; end if;
   if v_candidate.model_year is distinct from v_lot.model_year then raise exception 'candidate model year does not match lot'; end if;
   if v_candidate.current_value_cop is null or v_candidate.current_value_cop<=0 then raise exception 'candidate has no usable current value'; end if;
+  if v_candidate.description is null or trim(v_candidate.description)='' then raise exception 'candidate has no usable description'; end if;
   if not exists(select 1 from public.fasecolda_references r where r.code=v_candidate.code) then
     raise exception 'candidate reference not found';
   end if;
@@ -297,6 +291,11 @@ begin
       v_note:=nullif(trim(coalesce(v_dimensions->v_dim->>'evidence_note','')),'');
       v_observed:=nullif(trim(coalesce(v_dimensions->v_dim->>'observed_value','')),'');
       v_source:=nullif(trim(coalesce(v_dimensions->v_dim->>'source_url','')),'');
+      v_discriminates_text:=lower(trim(coalesce(v_dimensions->v_dim->>'discriminating','false')));
+      if v_discriminates_text not in ('true','false') then
+        raise exception 'invalid discriminating flag for dimension %',v_dim;
+      end if;
+      v_discriminates:=v_discriminates_text='true';
 
       if v_status is not null and not(v_status=any(v_allowed)) then
         raise exception 'invalid evidence status for dimension %',v_dim;
@@ -304,10 +303,17 @@ begin
       if v_note is not null and char_length(v_note)>1000 then raise exception 'evidence note too long for dimension %',v_dim; end if;
       if v_observed is not null and char_length(v_observed)>500 then raise exception 'observed value too long for dimension %',v_dim; end if;
       if v_source is not null and char_length(v_source)>2000 then raise exception 'source url too long for dimension %',v_dim; end if;
+      if v_source is not null and v_source !~* '^https?://' then raise exception 'evidence source must be http or https for dimension %',v_dim; end if;
       if v_source is not null
          and v_source is distinct from v_lot.url
          and not exists(select 1 from public.lot_attachments a where a.lot_id=v_lot.id and a.url=v_source) then
         raise exception 'evidence source does not belong to lot for dimension %',v_dim;
+      end if;
+      if v_discriminates and (v_dim='line_identity' or v_status is distinct from 'MATCH') then
+        raise exception 'discriminating flag is allowed only for non-line MATCH dimensions';
+      end if;
+      if v_discriminates and (v_note is null or char_length(v_note)<20) then
+        raise exception 'discriminating MATCH requires evidence note of at least 20 characters';
       end if;
 
       if v_status is not null
@@ -319,7 +325,7 @@ begin
 
       if v_status='MATCH' then
         v_matches:=v_matches+1;
-        if v_dim<>'line_identity' then v_discriminating:=v_discriminating+1; end if;
+        if v_discriminates then v_discriminating:=v_discriminating+1; end if;
       elsif v_status='CONFLICT' then
         v_conflicts:=v_conflicts+1;
       elsif v_status='NOT_STATED' then
@@ -351,11 +357,9 @@ begin
     if v_complete<>6 then raise exception 'reviewed candidate evidence requires all six dimensions complete'; end if;
     if v_line_status is distinct from 'MATCH' then raise exception 'reviewed candidate evidence requires line identity MATCH'; end if;
     if v_conflicts>0 then raise exception 'reviewed candidate evidence cannot contain CONFLICT'; end if;
-    if v_discriminating<1 then raise exception 'reviewed candidate evidence requires at least one discriminating MATCH beyond line identity'; end if;
+    if v_discriminating<1 then raise exception 'reviewed candidate evidence requires at least one explicitly discriminating MATCH beyond line identity'; end if;
     if v_summary is null or char_length(v_summary)<20 then raise exception 'reviewed candidate evidence requires summary note of at least 20 characters'; end if;
 
-    -- If two current codes have the same normalized year/description, the public
-    -- candidate payload cannot distinguish them. Do not permit an arbitrary code pick.
     if exists(
       select 1
       from public.lot_fasecolda_candidates c
@@ -535,4 +539,4 @@ revoke all on public.dashboard_fasecolda_candidate_resolution_cockpit_v52 from p
 grant select on public.dashboard_fasecolda_candidate_resolution_cockpit_v52 to service_role;
 
 comment on view public.dashboard_fasecolda_candidate_resolution_cockpit_v52 is
-'v0.52 candidate-resolution cockpit. Exact-code manual HIGH requires six-dimension, trusted-source human evidence; DRAFT does not alter the effective Fasecolda match. Not a buy signal.';
+'v0.52 candidate-resolution cockpit. Exact-code manual HIGH requires six-dimension, trusted-source human evidence and an explicitly marked discriminating match; DRAFT does not alter the effective Fasecolda match. Not a buy signal.';
