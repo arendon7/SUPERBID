@@ -49,16 +49,28 @@ def test_legacy_manual_resolution_is_backend_gated_by_reviewed_v052_snapshot():
     assert "new.source_evaluated_at is distinct from e.source_evaluated_at" in s
 
 
-def test_reviewed_contract_requires_all_six_dimensions_no_conflict_and_discriminator():
+def test_reviewed_contract_requires_all_six_dimensions_no_conflict_and_explicit_discriminator():
     s = sql()
     for dim in ("line_identity", "engine_cc", "transmission", "fuel", "drivetrain", "trim_body_use"):
         assert f"'{dim}'" in s
     assert "reviewed candidate evidence requires all six dimensions complete" in s
     assert "reviewed candidate evidence requires line identity MATCH" in s
     assert "reviewed candidate evidence cannot contain CONFLICT" in s
-    assert "reviewed candidate evidence requires at least one discriminating MATCH beyond line identity" in s
+    assert "reviewed candidate evidence requires at least one explicitly discriminating MATCH beyond line identity" in s
     assert "reviewed candidate evidence requires summary note of at least 20 characters" in s
     assert "NOT_STATED" in s
+
+
+def test_discriminator_flag_is_human_explicit_and_semantically_restricted():
+    s = sql()
+    assert "invalid discriminating flag for dimension" in s
+    assert "discriminating flag is allowed only for non-line MATCH dimensions" in s
+    assert "discriminating MATCH requires evidence note of at least 20 characters" in s
+    assert "if v_discriminates then v_discriminating:=v_discriminating+1" in s
+    t = cockpit()
+    assert "__discriminating" in t
+    assert "Este MATCH distingue al candidato frente a por lo menos una alternativa actual" in t
+    assert "discriminating:String(f.get" in t
 
 
 def test_source_binding_and_observed_values_are_backend_validated():
@@ -66,6 +78,7 @@ def test_source_binding_and_observed_values_are_backend_validated():
     assert "v_source is distinct from v_lot.url" in s
     assert "from public.lot_attachments a where a.lot_id=v_lot.id and a.url=v_source" in s
     assert "evidence source does not belong to lot for dimension" in s
+    assert "evidence source must be http or https for dimension" in s
     assert "reviewed candidate evidence requires observed value for assessed dimension" in s
     assert "evidence note too long for dimension" in s
     assert "observed value too long for dimension" in s
