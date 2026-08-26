@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import re
 from bs4 import BeautifulSoup
+from .identity_hints import ENGINE_CC_RE
 from .models import LotObservation, Outcome
 
 LOT_ID_RE = re.compile(r"-(\d{6,10})(?:[/?#]|$)")
 YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
-CC_RE = re.compile(r"\b(\d{3,5})\s*CC\b", re.I)
 KM_RE = re.compile(r"(\d[\d\.\s]{2,})\s*(?:KM|KMS|KIL[ÓO]METROS)", re.I)
 PLATE_RE = re.compile(r"(?:PLACA|PATENTE)\s*[:\-]?\s*([A-Z0-9*]{1,8})", re.I)
 CITY_RE = re.compile(r"(?:UBIC(?:ACI[ÓO]N)?\.?|UBICADO EN)\s*[:\-]?\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ .-]{2,40})", re.I)
@@ -123,7 +123,7 @@ def parse_lot_html(url: str, html: str) -> LotObservation:
     model_year = years[0] if years else None
     plate = first_match(PLATE_RE, vehicle_text)
     partial = bool(plate and ("*" in plate or len(plate) < 6))
-    cc = first_match(CC_RE, vehicle_text)
+    cc = first_match(ENGINE_CC_RE, vehicle_text)
     km = first_match(KM_RE, vehicle_text)
     city = first_match(CITY_RE, vehicle_text)
     initial_bid, initial_label = _find_money_after(text, ["Oferta inicial", "Lance inicial", "Valor inicial", "Precio inicial"])
