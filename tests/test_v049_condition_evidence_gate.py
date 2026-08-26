@@ -42,7 +42,6 @@ def test_no_public_peritaje_is_now_a_real_readiness_blocker():
     assert "when b.peritaje_count=0 and b.condition_disposition_status in ('UNREVIEWED','DRAFT') then 'CONDITION_RISK_UNREVIEWED'" in sql
     assert "when x.peritaje_count=0 and x.condition_disposition_status in ('UNREVIEWED','DRAFT') then 'REVIEW_CONDITION_RISK'" in sql
     assert "NO_PUBLIC_PERITAJE_REQUIRES_EXPLICIT_DISPOSITION" in sql
-    # Existing public-peritaje workflow must remain authoritative when evidence exists.
     assert "when b.peritaje_count > 0 and b.peritaje_review_status <> 'REVIEWED' then 'PERITAJE_NOT_REVIEWED'" in sql
     assert "when x.peritaje_count > 0 and x.peritaje_review_status <> 'REVIEWED' then 'REVIEW_PERITAJE'" in sql
 
@@ -88,12 +87,12 @@ def test_readiness_and_due_diligence_column_contracts_are_append_only():
     sql = migration()
     readiness = sql.split("create or replace view public.dashboard_economic_readiness_current as", 1)[1]
     readiness = readiness.split("revoke all on public.dashboard_economic_readiness_current", 1)[0]
-    assert readiness.index("d.fasecolda_match_interpretation") < readiness.index("x.condition_disposition_status")
+    projection = readiness.split("select\n  x.external_lot_id", 1)[1].split("from blockers x", 1)[0]
+    assert projection.index("d.fasecolda_match_interpretation") < projection.index("x.condition_disposition_status")
 
     old = V46.read_text(encoding="utf-8")
     old_prefix = old.split("'DUE_DILIGENCE_PRIORITY_NOT_BUY_SIGNAL'::text as due_diligence_interpretation", 1)[0]
     current = sql.split("create or replace view public.dashboard_due_diligence_queue as", 1)[1]
-    # The canonical v0.46 identifiers/order remain before appended condition fields.
     for token in (
         "r.external_lot_id",
         "r.blockers",
