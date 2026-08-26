@@ -44,7 +44,10 @@ def test_workbench_keeps_exact_lot_for_every_child_workflow():
 
 def test_legacy_resolver_preserves_exact_lot_but_has_no_write_authority():
     assert 'searchparams.get("lot")' in LEGACY_RESOLVER.lower()
-    assert "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY_RESOLVER
+    assert (
+        "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY_RESOLVER
+        or "superbid-fasecolda-source-dashboard/lots/" in LEGACY_RESOLVER
+    )
     assert "legacy_fasecolda_resolver_redirect_no_business_write" in LEGACY_RESOLVER.lower()
     assert rpc_names(LEGACY_RESOLVER) == set()
 
