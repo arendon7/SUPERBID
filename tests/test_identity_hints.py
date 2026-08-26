@@ -1,4 +1,5 @@
 from superbid_collector.identity_hints import (
+    ENGINE_CC_NOMINAL_TOLERANCE,
     IDENTITY_HINT_GUARDRAIL,
     compare_vehicle_identity_hints,
     extract_vehicle_identity_hints,
@@ -7,6 +8,7 @@ from superbid_collector.identity_hints import (
 
 def test_identity_hint_guardrail_is_explicit():
     assert IDENTITY_HINT_GUARDRAIL == "AUTOMATED_IDENTITY_HINT_NOT_HUMAN_EVIDENCE_OR_MATCH"
+    assert ENGINE_CC_NOMINAL_TOLERANCE == 50
 
 
 def test_extracts_literal_engine_transmission_drivetrain_and_fuel():
@@ -47,6 +49,13 @@ def test_comparison_is_descriptive_not_a_candidate_score():
     assert comparison["drivetrain"]["status"] == "LOT_UNKNOWN"
     assert comparison["fuel"]["status"] == "LOT_UNKNOWN"
     assert "score" not in comparison
+
+
+def test_nominal_engine_displacement_is_compatible_but_not_exactly_equal():
+    for lot_cc, candidate_cc in ((1598, 1600), (2999, 3000), (5193, 5200), (1451, 1500)):
+        comparison = compare_vehicle_identity_hints(f"{lot_cc} CC", f"{candidate_cc}CC")
+        assert comparison["engine_cc"]["status"] == "NOMINAL_COMPATIBLE"
+    assert compare_vehicle_identity_hints("1450 CC", "1501CC")["engine_cc"]["status"] == "DIFFERS"
 
 
 def test_difference_and_missing_candidate_hint_remain_explicit():
