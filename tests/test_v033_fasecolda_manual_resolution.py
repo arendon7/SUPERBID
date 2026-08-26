@@ -3,7 +3,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIG = (ROOT / "supabase/migrations/20260821191118_fasecolda_manual_resolution_v33.sql").read_text(encoding="utf-8").lower()
 ORIGIN = (ROOT / "supabase/migrations/20260821191250_readiness_fasecolda_origin_v33.sql").read_text(encoding="utf-8").lower()
-DASH = (ROOT / "supabase/functions/superbid-fasecolda-dashboard/index.ts").read_text(encoding="utf-8").lower()
+LEGACY = (ROOT / "supabase/functions/superbid-fasecolda-dashboard/index.ts").read_text(encoding="utf-8").lower()
+COCKPIT = (ROOT / "supabase/functions/superbid-fasecolda-candidate-cockpit/index.ts").read_text(encoding="utf-8").lower()
 READY = (ROOT / "supabase/functions/superbid-readiness-dashboard/index.ts").read_text(encoding="utf-8").lower()
 
 
@@ -54,23 +55,31 @@ def test_readiness_appends_match_origin_without_replacing_buy_logic():
     assert "final_decision" in ORIGIN
 
 
-def test_resolver_ui_never_preselects_candidate_and_requires_confirmation():
-    assert 'type="radio" name="code"' in DASH
-    assert 'type="radio" name="code" value=' in DASH
-    assert 'type="radio" name="code" checked' not in DASH
-    assert 'name="confirm_resolution" value="yes"' in DASH
-    assert "debe confirmar explícitamente la homologación manual" in DASH
-    assert "ningún candidato viene preseleccionado" in DASH
+def test_legacy_resolver_is_retired_without_losing_exact_lot_context():
+    assert "legacy_fasecolda_resolver_redirect_no_business_write" in LEGACY
+    assert "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY
+    assert r"^\d{5,12}$" in LEGACY
+    assert "dashboard_set_fasecolda_manual_resolution" not in LEGACY
+    assert "/rest/v1/rpc/" not in LEGACY
 
 
-def test_resolver_ui_calls_only_manual_resolution_rpc_for_business_write():
-    assert "dashboard_set_fasecolda_manual_resolution" in DASH
-    assert "dashboard_save_lot_costs" not in DASH
-    assert "dashboard_save_peritaje_review" not in DASH
-    assert "max_bid_market_validated_cop=" not in DASH
-    assert "final_decision=" not in DASH
-    assert 'p_action:"confirm"' in DASH
-    assert 'p_action:"clear"' in DASH
+def test_candidate_cockpit_never_uses_automatic_best_as_a_selection():
+    assert "ningún candidato se preselecciona automáticamente" in COCKPIT
+    assert "ningún código se elige automáticamente" in COCKPIT
+    assert "const requested=" in COCKPIT
+    assert "persisted=evidence" in COCKPIT
+    assert "selected=candidatecodes.has(requested)" in COCKPIT
+    assert "confirm_resolution" in COCKPIT
+
+
+def test_candidate_cockpit_uses_evidence_rpc_not_legacy_confirm_rpc():
+    assert "dashboard_save_fasecolda_candidate_resolution" in COCKPIT
+    assert "dashboard_clear_fasecolda_candidate_resolution_v52" in COCKPIT
+    assert "dashboard_set_fasecolda_manual_resolution" not in COCKPIT
+    assert "dashboard_save_lot_costs" not in COCKPIT
+    assert "dashboard_save_peritaje_review" not in COCKPIT
+    assert "max_bid_market_validated_cop=" not in COCKPIT
+    assert "final_decision=" not in COCKPIT
 
 
 def test_readiness_dashboard_surfaces_origin_and_routes_valuation_review():
@@ -83,8 +92,9 @@ def test_readiness_dashboard_surfaces_origin_and_routes_valuation_review():
     assert 'a==="review_valuation"' in READY
 
 
-def test_resolver_is_private_server_rendered():
-    assert "dashboard_token_valid" in DASH
-    assert "httponly; secure; samesite=strict" in DASH
-    assert "<script" not in DASH
-    assert "deno.serve" in DASH
+def test_new_resolver_is_private_server_rendered_and_legacy_shim_has_no_data_authority():
+    assert "dashboard_token_valid" in COCKPIT
+    assert "httponly; secure; samesite=strict" in COCKPIT
+    assert "<script" not in COCKPIT
+    assert "deno.serve" in COCKPIT
+    assert "supabase_service_role_key" not in LEGACY
