@@ -132,7 +132,6 @@ def test_v056_workbench_routes_candidate_work_by_source_sufficiency_without_read
     assert "superbid-fasecolda-candidate-cockpit" in lower
     assert "superbid-fasecolda-source-dashboard" in lower
     assert "where er.next_action='review_valuation'" in lower
-    # Replacing the routing view must not mutate readiness/economic state.
     routing = lower[lower.index("create or replace view public.dashboard_fasecolda_valuation_workbench"):]
     assert "update public.dashboard_economic_readiness_current" not in routing
     assert "insert into public.dashboard_economic_readiness_current" not in routing
@@ -171,7 +170,6 @@ def test_v056_source_dashboard_does_not_extract_or_diagnose_pdf_content():
     assert "target literal del título · solo proxy read-only" in lower
     for forbidden in ("pdfjs", "ocr", "tesseract", "extracttext", "diagnosepdf", "vision"):
         if forbidden == "ocr":
-            # The explicit UI warning is allowed; executable OCR APIs are not.
             assert "ocr(" not in lower
         else:
             assert forbidden not in lower
@@ -206,9 +204,10 @@ def test_v056_does_not_expand_v052_candidate_cockpit_write_surface():
     )
 
 
-def test_v056_package_version_is_exact_and_consistent():
+def test_v056_package_version_baseline_is_consistent_and_forward_compatible():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 56, 0)
+    assert pv == iv
+    assert pv >= (0, 56, 0)
