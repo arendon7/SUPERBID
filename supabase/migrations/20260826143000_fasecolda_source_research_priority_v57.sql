@@ -89,6 +89,9 @@ grant select on public.dashboard_fasecolda_attachment_research_inventory_v57 to 
 create or replace view public.dashboard_fasecolda_source_research_priority_v57 as
 select
   cst.*,
+  er.readiness_status,
+  er.next_action as readiness_next_action,
+  (er.next_action='REVIEW_VALUATION' and cst.operational_route<>'EVIDENCE_REVIEW') as source_research_actionable,
   coalesce(inv.identity_primary_count,0)::integer as identity_primary_count,
   coalesce(inv.identity_secondary_count,0)::integer as identity_secondary_count,
   coalesce(inv.condition_identity_potential_count,0)::integer as condition_identity_potential_count,
@@ -121,7 +124,8 @@ select
   end as research_reason,
   'SOURCE_RESEARCH_PRIORITY_METADATA_ONLY_NOT_EVIDENCE_MATCH_OR_VALUATION'::text as research_interpretation
 from public.dashboard_fasecolda_candidate_source_triage_v56 cst
-left join public.dashboard_fasecolda_attachment_research_inventory_v57 inv using(lot_id);
+left join public.dashboard_fasecolda_attachment_research_inventory_v57 inv using(lot_id)
+left join public.dashboard_economic_readiness_current er using(lot_id);
 
 revoke all on public.dashboard_fasecolda_source_research_priority_v57 from public,anon,authenticated;
 grant select on public.dashboard_fasecolda_source_research_priority_v57 to service_role;
