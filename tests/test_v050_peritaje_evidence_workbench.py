@@ -21,6 +21,12 @@ def rpc_names(source: str) -> set[str]:
     return set(re.findall(r"/rest/v1/rpc/([a-z0-9_]+)", source.lower()))
 
 
+def _version_tuple(text: str, pattern: str) -> tuple[int, int, int]:
+    match = re.search(pattern, text)
+    assert match
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
 def test_v050_evidence_state_is_private_and_auditable():
     s = sql()
     assert "create table if not exists public.lot_peritaje_evidence_reviews" in s
@@ -120,6 +126,16 @@ def test_workbench_keeps_pdf_and_human_evidence_in_same_case_flow():
     assert "superbid-cost-governance-dashboard/lots/" not in t
 
 
+def test_edge_html_copy_does_not_break_template_literal_bundle():
+    t = wb()
+    # Regression for the real Supabase bundler rejection during v0.50 deploy:
+    # raw Markdown backticks inside a TypeScript template literal terminated it early.
+    assert "`NOT_EVALUABLE`" not in t
+    assert "`repair_cop`" not in t
+    assert "<strong>NOT_EVALUABLE</strong>" in t
+    assert "<code>repair_cop</code>" in t
+
+
 def test_readiness_routes_review_peritaje_to_v050_exact_workbench():
     t = READY.read_text(encoding="utf-8")
     assert 'a==="REVIEW_PERITAJE"' in t
@@ -127,6 +143,10 @@ def test_readiness_routes_review_peritaje_to_v050_exact_workbench():
     assert "PERITAJE_NOT_REVIEWED" in t
 
 
-def test_package_version_is_v050():
-    assert 'version = "0.50.0"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert '__version__ = "0.50.0"' in (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
+def test_v050_package_lineage_is_consistent_in_forward_releases():
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
+    project_version = _version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
+    package_version = _version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
+    assert project_version == package_version
+    assert project_version >= (0, 50, 0)
