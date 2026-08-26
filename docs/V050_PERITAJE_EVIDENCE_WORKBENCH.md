@@ -84,6 +84,21 @@ Riesgos permitidos:
 
 `NOT_EVALUABLE` es deliberado: cuando el PDF no permite concluir, el sistema obliga a documentar esa limitación en lugar de inventar certeza.
 
+## Conservación explícita de incertidumbre
+
+v0.50 no permite que una dimensión `NOT_EVALUABLE` desaparezca silenciosamente del resumen global.
+
+El estado conserva `not_evaluable_count` entre 0 y 8 y aplica esta regla de agregación:
+
+- si existe al menos un `CRITICAL`, el resumen es `CRITICAL`;
+- en ausencia de `CRITICAL`, si existe un `HIGH`, el resumen es `HIGH`;
+- en ausencia de los anteriores, si existe un `MEDIUM`, el resumen es `MEDIUM`;
+- `LOW` solo puede ser resumen global cuando existe al menos un `LOW` y `not_evaluable_count = 0`;
+- si únicamente existen riesgos LOW junto con una o más dimensiones `NOT_EVALUABLE`, el resumen queda `NOT_EVALUABLE`;
+- si todas las dimensiones son `NOT_EVALUABLE`, el resumen queda `NOT_EVALUABLE`.
+
+Esto evita convertir falta de evidencia en una señal implícita de bajo riesgo. `not_evaluable_count` se conserva tanto en estado actual como en histórico y se muestra en el workbench.
+
 ## Modelo de evidencia
 
 ### `lot_peritaje_evidence_reviews`
@@ -96,6 +111,7 @@ Contiene:
 - JSON `dimensions`;
 - `overall_risk`;
 - completitud 0–8;
+- `not_evaluable_count` 0–8;
 - rango low/base/high;
 - fundamento del rango;
 - notas generales;
@@ -104,7 +120,7 @@ Contiene:
 
 ### `lot_peritaje_evidence_review_history`
 
-Registro append-only de cada DRAFT o REVIEWED.
+Registro append-only de cada DRAFT o REVIEWED, incluyendo `not_evaluable_count`.
 
 No se elimina ni reemplaza el histórico v0.29. El nuevo histórico complementa la trazabilidad existente.
 
@@ -121,6 +137,7 @@ v0.50 agrega `trg_peritaje_evidence_review_gate_v50` sobre `lot_peritaje_reviews
 Si `reviewed_at` es no nulo, el trigger exige:
 
 - un registro de evidencia v0.50 REVIEWED para el mismo lote;
+- mismo `external_lot_id`;
 - mismo PDF fuente;
 - mismos 8 riesgos;
 - mismo `overall_risk`;
@@ -158,7 +175,8 @@ Devuelve explícitamente:
 - `diagnosis_generated=false`;
 - `buy_signal=false`;
 - `cost_fields_modified=false`;
-- `economic_fields_modified=false`.
+- `economic_fields_modified=false`;
+- `not_evaluable_count`.
 
 ## Workbench
 
@@ -173,6 +191,13 @@ Por defecto muestra únicamente:
 `next_action = REVIEW_PERITAJE`
 
 Puede ampliarse a todos los lotes activos con peritaje o al histórico completo.
+
+La cola muestra separadamente:
+
+- completitud de evidencia;
+- número de dimensiones no evaluables;
+- resumen global de riesgo;
+- rango de reparación.
 
 ### Detalle exacto
 
@@ -192,6 +217,7 @@ Incluye:
 - low/base/high;
 - fundamento del rango;
 - notas generales;
+- conteo de dimensiones `NOT_EVALUABLE`;
 - histórico append-only.
 
 Si solo existe un PDF, se preselecciona como **fuente documental**, nunca como conclusión.
@@ -229,7 +255,8 @@ Guardrail de routing:
 - redirects construidos server-side;
 - cookie propia `HttpOnly; Secure; SameSite=Strict`;
 - `verify_jwt=false` solo porque el dashboard usa autenticación privada custom existente;
-- URLs de PDF renderizadas únicamente si son `http` o `https`.
+- URLs de PDF renderizadas únicamente si son `http` o `https`;
+- keys JSON de dimensiones se validan contra la lista canónica antes de escribir.
 
 RPCs visibles desde el workbench:
 
@@ -263,17 +290,18 @@ Solo después de suite completa y merge certificado:
 1. REVIEWED exige PDF fuente perteneciente al lote.
 2. REVIEWED exige 8/8 dimensiones.
 3. Cada dimensión REVIEWED exige riesgo y evidencia textual.
-4. `NOT_EVALUABLE` permanece disponible.
-5. REVIEWED exige low/base/high y fundamento.
-6. Trigger impide divergencia entre evidencia v0.50 y revisión canónica.
-7. Workbench conserva el lote durante autenticación.
-8. No hay open redirects.
-9. Workbench solo expone autenticación + RPC de evidencia.
-10. No existe transferencia automática a costos.
-11. No existe diagnóstico automático.
-12. No existe buy signal.
-13. Readiness enruta el peritaje exacto al workbench.
-14. Contratos legacy permanecen consultables.
-15. Versión de paquete = `0.50.0`.
-16. Suite histórica completa PASS.
-17. Producción recibe 0 revisiones ficticias durante migración/deploy.
+4. `NOT_EVALUABLE` permanece disponible y contabilizado.
+5. `LOW + NOT_EVALUABLE` no puede resumirse como LOW global.
+6. REVIEWED exige low/base/high y fundamento.
+7. Trigger impide divergencia entre evidencia v0.50 y revisión canónica.
+8. Workbench conserva el lote durante autenticación.
+9. No hay open redirects.
+10. Workbench solo expone autenticación + RPC de evidencia.
+11. No existe transferencia automática a costos.
+12. No existe diagnóstico automático.
+13. No existe buy signal.
+14. Readiness enruta el peritaje exacto al workbench.
+15. Contratos legacy permanecen consultables.
+16. Versión de paquete = `0.50.0`.
+17. Suite histórica completa PASS.
+18. Producción recibe 0 revisiones ficticias durante migración/deploy.
