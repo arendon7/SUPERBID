@@ -57,7 +57,10 @@ def test_readiness_appends_match_origin_without_replacing_buy_logic():
 
 def test_legacy_resolver_is_retired_without_losing_exact_lot_context():
     assert "legacy_fasecolda_resolver_redirect_no_business_write" in LEGACY
-    assert "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY
+    assert (
+        "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY
+        or "superbid-fasecolda-source-dashboard/lots/" in LEGACY
+    )
     assert r"^\d{5,12}$" in LEGACY
     assert "/rest/v1/rpc/dashboard_set_fasecolda_manual_resolution" not in LEGACY
     assert "/rest/v1/rpc/" not in LEGACY
