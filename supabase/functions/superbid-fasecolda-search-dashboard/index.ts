@@ -150,7 +150,10 @@ async function board(req: Request) {
     const action = ex.disposition === "EXPLORABLE"
       ? `<form method="post" action="${BASE}/lots/${esc(x.external_lot_id)}/explore"><button class="primary">Explorar ${esc(ex.variants.length)} variante(s)</button></form>`
       : `<div class="notice ${ex.disposition === "IDENTITY_INPUT_REVIEW" ? "bad" : ""}">${ex.disposition === "IDENTITY_INPUT_REVIEW" ? "La marca/identidad canónica del lote no permite probes seguros. Corregir identidad antes de buscar." : "Falta año de modelo; resolver año antes de explorar Fasecolda."}</div>`;
-    return `<article class="lot"><div class="head" style="padding:0 0 10px;border:0"><div><h2>${esc(x.title)}</h2><div class="sub">Lote ${esc(x.external_lot_id)} · ${esc([x.city, x.seller].filter(Boolean).join(" · "))}</div></div><div class="badges">${reasonPill(x.diagnostic_reason)}${dispositionPill(ex.disposition)}</div></div><div class="meta"><div class="kv"><span>Brand canónico</span><strong>${esc(x.brand || "—")}</strong></div><div class="kv"><span>Año</span><strong>${esc(x.model_year ?? "—")}</strong></div><div class="kv"><span>Estado</span><strong>${esc(x.effective_status)}</strong></div><div class="kv"><span>Término actual</span><strong>${esc(x.current_search_term || "—")}</strong></div><div class="kv"><span>Sugerido</span><strong>${esc(x.suggested_search_term || "—")}</strong></div><div class="kv"><span>Candidatos actuales</span><strong>${esc(x.candidate_count ?? 0)}</strong></div></div><div class="codes">${terms || '<span class="sub">Sin variantes seguras.</span>'}</div>${action}<form class="form" method="post" action="${BASE}/lots/${esc(x.external_lot_id)}/probe"><label><span>Probe manual avanzado</span><input name="term" maxlength="80" required placeholder="Término exacto que desea probar"></label><p class="sub">El backend exige preservar la marca canónica. El probe manual tampoco persiste nada.</p><button>Probar un término manual</button></form><p><a class="btn" href="/functions/v1/superbid-fasecolda-workbench?lot=${esc(x.external_lot_id)}">Volver al caso</a> <a class="btn" href="/functions/v1/superbid-dashboard/lots/${esc(x.external_lot_id)}">Detalle del lote</a></p></article>`;
+    const manualProbe = ex.disposition === "EXPLORABLE"
+      ? `<form class="form" method="post" action="${BASE}/lots/${esc(x.external_lot_id)}/probe"><label><span>Probe manual avanzado</span><input name="term" maxlength="80" required placeholder="Término exacto que desea probar"></label><p class="sub">El backend revalida que el caso siga siendo EXPLORABLE y exige preservar la marca canónica. El probe manual tampoco persiste nada.</p><button>Probar un término manual</button></form>`
+      : "";
+    return `<article class="lot"><div class="head" style="padding:0 0 10px;border:0"><div><h2>${esc(x.title)}</h2><div class="sub">Lote ${esc(x.external_lot_id)} · ${esc([x.city, x.seller].filter(Boolean).join(" · "))}</div></div><div class="badges">${reasonPill(x.diagnostic_reason)}${dispositionPill(ex.disposition)}</div></div><div class="meta"><div class="kv"><span>Brand canónico</span><strong>${esc(x.brand || "—")}</strong></div><div class="kv"><span>Año</span><strong>${esc(x.model_year ?? "—")}</strong></div><div class="kv"><span>Estado</span><strong>${esc(x.effective_status)}</strong></div><div class="kv"><span>Término actual</span><strong>${esc(x.current_search_term || "—")}</strong></div><div class="kv"><span>Sugerido</span><strong>${esc(x.suggested_search_term || "—")}</strong></div><div class="kv"><span>Candidatos actuales</span><strong>${esc(x.candidate_count ?? 0)}</strong></div></div><div class="codes">${terms || '<span class="sub">Sin variantes seguras.</span>'}</div>${action}${manualProbe}<p><a class="btn" href="/functions/v1/superbid-fasecolda-workbench?lot=${esc(x.external_lot_id)}">Volver al caso</a> <a class="btn" href="/functions/v1/superbid-dashboard/lots/${esc(x.external_lot_id)}">Detalle del lote</a></p></article>`;
   }).join("");
   return html("SUPERBID — Search Exploration", `<header class="top"><div><div class="ey">SUPERBID · v0.54</div><h1>Fasecolda Search Exploration Matrix</h1></div>${nav}</header><main>${lot ? `<div class="notice ok"><strong>Modo lote ${esc(lot)}.</strong> El diagnóstico está restringido al caso seleccionado.</div>` : ""}<div class="notice"><strong>${esc(SEARCH_EXPLORATION_GUARDRAIL)} · FASECOLDA_SEARCH_PROBE_NOT_MATCH · CASE_CONTEXT_ROUTING_NOT_BUY_SIGNAL.</strong> Las variantes son hipótesis de búsqueda. Explorar ejecuta probes read-only y nunca selecciona un término ganador. Un override solo puede confirmarse individualmente después de revisar un resultado con códigos públicos.</div><section class="metrics">${metrics}</section><section class="panel"><div class="head"><div><h2>${esc(enriched.length)} diagnósticos</h2><span class="sub">Los casos de identidad de entrada y año se separan del problema de búsqueda.</span></div>${filter}</div></section><div class="stack">${cards || '<section class="lot">Sin casos para este filtro.</section>'}</div></main>`);
 }
@@ -201,6 +204,12 @@ async function explore(lot: string) {
 
 async function singleProbe(lot: string, req: Request) {
   try {
+    const x = await loadCase(lot);
+    if (!x) return html("Caso no disponible", `<main><div class="notice bad">El lote ${esc(lot)} no está actualmente en el workflow de búsqueda Fasecolda.</div><a class="btn" href="${BASE}">Volver</a></main>`, 404);
+    const ex = explorationFor(x);
+    if (ex.disposition !== "EXPLORABLE") {
+      return html("Probe bloqueado", `<main><div class="notice bad"><strong>${esc(ex.disposition)}.</strong> El probe manual también está bloqueado hasta corregir la identidad/año de entrada. No se llamó a Fasecolda.</div><a class="btn" href="${BASE}?lot=${esc(lot)}&reason=ALL">Volver</a></main>`, 409);
+    }
     const f = await req.formData();
     const term = String(f.get("term") || "").trim();
     const r = await db("/rest/v1/rpc/dashboard_probe_fasecolda_search_term", { method: "POST", body: JSON.stringify({ p_external_lot_id: lot, p_term: term }) });
@@ -217,6 +226,10 @@ async function singleProbe(lot: string, req: Request) {
 
 async function overrideTerm(lot: string, req: Request) {
   try {
+    const x = await loadCase(lot);
+    if (!x) throw new Error("El lote ya no está en el workflow de búsqueda Fasecolda.");
+    const ex = explorationFor(x);
+    if (ex.disposition !== "EXPLORABLE") throw new Error(`Override bloqueado por ${ex.disposition}; corrija primero la identidad/año de entrada.`);
     const f = await req.formData();
     const term = String(f.get("term") || "").trim();
     const note = String(f.get("note") || "").trim();
