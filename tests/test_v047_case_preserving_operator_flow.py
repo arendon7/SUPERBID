@@ -59,12 +59,16 @@ def test_candidate_cockpit_is_exact_before_and_after_mutation():
     assert "ningún candidato se preselecciona automáticamente" in COCKPIT.lower()
 
 
-def test_search_workflow_keeps_exact_lot_through_probe_and_override():
-    assert "external_lot_id=eq.${encodeURIComponent(lot)}" in SEARCH
-    assert "dashboard_probe_fasecolda_search_term" in SEARCH
-    assert "dashboard_set_fasecolda_search_term_override" in SEARCH
-    assert "superbid-fasecolda-search-dashboard?lot=${encodeURIComponent(id)}&reason=ALL&saved=1" in SEARCH
-    assert "superbid-fasecolda-workbench?lot=${esc(id)}" in SEARCH
+def test_search_workflow_keeps_exact_lot_through_explore_probe_and_override():
+    lower = SEARCH.lower()
+    assert "external_lot_id=eq.${encodeuricomponent(lot)}" in lower
+    assert "dashboard_probe_fasecolda_search_term" in lower
+    assert "dashboard_set_fasecolda_search_term_override" in lower
+    assert "/lots/${esc(x.external_lot_id)}/explore" in SEARCH
+    assert "/lots/${esc(x.external_lot_id)}/probe" in SEARCH
+    assert "/lots/${esc(lot)}/override" in SEARCH
+    assert "superbid-fasecolda-workbench?lot=${encodeURIComponent(lot)}" in SEARCH
+    assert "superbid-fasecolda-workbench?lot=${esc(lot)}" in SEARCH
 
 
 def test_year_and_evidence_filter_grouped_cases_by_lot_membership():
