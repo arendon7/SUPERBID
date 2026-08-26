@@ -62,9 +62,10 @@ def test_v051_is_release_engineering_only_and_does_not_add_business_authority():
         assert forbidden not in combined
 
 
-def test_v051_package_version_is_consistent():
+def test_v051_package_version_contract_is_forward_compatible():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     project_version = _version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     package_version = _version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert project_version == package_version == (0, 51, 0)
+    assert project_version == package_version
+    assert project_version >= (0, 51, 0)
