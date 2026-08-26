@@ -61,6 +61,15 @@ Deno.test("duplicate normalized descriptions are grouped as indistinguishable", 
   assert(!map.entries[2].indistinguishableByDescription, "unique entry incorrectly marked");
 });
 
+Deno.test("duplicate grouping mirrors v0.52 and does not erase punctuation", () => {
+  const map = buildCandidateDiscriminatorMap([
+    { code: "A", description: "RENAULT OROCH-ZEN MT 1300CC" },
+    { code: "B", description: "RENAULT OROCH ZEN MT 1300CC" },
+  ]);
+  assert(!map.hasIndistinguishableDescriptions, "punctuation must remain relevant to the v0.52 duplicate gate");
+  assert(!map.entries[0].indistinguishableByDescription && !map.entries[1].indistinguishableByDescription, "v0.55 grouped more aggressively than v0.52");
+});
+
 Deno.test("candidate order is preserved and token deltas are deterministic and bounded", () => {
   const long = Array.from({ length: 30 }, (_, i) => `TRIM${i}`).join(" ");
   const map = buildCandidateDiscriminatorMap([
