@@ -28,6 +28,8 @@ def test_v050_evidence_state_is_private_and_auditable():
     assert "enable row level security" in s
     assert "revoke all on public.lot_peritaje_evidence_reviews,public.lot_peritaje_evidence_review_history from public,anon,authenticated" in s
     assert "MANUAL_PERITAJE_EVIDENCE_NOT_AUTOMATED_DIAGNOSIS_OR_BUY_SIGNAL" in s
+    assert "not_evaluable_count smallint not null default 0" in s
+    assert "not_evaluable_count between 0 and 8" in s
 
 
 def test_reviewed_requires_all_eight_dimensions_and_evidence_notes():
@@ -38,6 +40,20 @@ def test_reviewed_requires_all_eight_dimensions_and_evidence_notes():
     assert "reviewed evidence requires all eight dimensions complete" in s
     assert "NOT_EVALUABLE" in s
     assert "unknown peritaje evidence dimension" in s
+    assert "jsonb_object_keys(v_dimensions) as keys(k)" in s
+
+
+def test_unevaluable_uncertainty_cannot_be_silently_summarized_as_low():
+    s = sql()
+    assert "if v_risk='NOT_EVALUABLE' then v_not_evaluable:=v_not_evaluable+1" in s
+    assert "when v_score=1 and v_not_evaluable=0 then 'LOW'" in s
+    assert "else 'NOT_EVALUABLE'" in s
+    assert "'not_evaluable_count',v_not_evaluable" in s
+    assert "coalesce(e.not_evaluable_count,0) as not_evaluable_count" in s
+    t = wb()
+    assert "not_evaluable_count" in t
+    assert "Con incertidumbre" in t
+    assert "no evaluable(s)" in t
 
 
 def test_reviewed_requires_valid_pdf_and_repair_range_basis():
@@ -54,6 +70,7 @@ def test_canonical_review_cannot_diverge_from_v050_evidence():
     assert "create or replace function public.enforce_peritaje_evidence_review_gate_v50" in s
     assert "v0.50 evidence workbench is required before peritaje REVIEWED" in s
     assert "reviewed peritaje must match current v0.50 evidence record" in s
+    assert "new.external_lot_id is distinct from e.external_lot_id" in s
     assert "create trigger trg_peritaje_evidence_review_gate_v50" in s
     assert "before insert or update on public.lot_peritaje_reviews" in s
 
