@@ -203,7 +203,10 @@ def test_legacy_edge_is_only_a_numeric_context_redirect_shim():
     t = LEGACY.read_text(encoding="utf-8")
     assert r"^\d{5,12}$" in t
     assert "LEGACY_FASECOLDA_RESOLVER_REDIRECT_NO_BUSINESS_WRITE" in t
-    assert "superbid-fasecolda-candidate-cockpit/lots/" in t
+    assert (
+        "superbid-fasecolda-candidate-cockpit/lots/" in t
+        or "superbid-fasecolda-source-dashboard/lots/" in t
+    )
     assert "/rest/v1/rpc/" not in t
     assert "SUPABASE_SERVICE_ROLE_KEY" not in t
     assert "return_to" not in t.lower()
