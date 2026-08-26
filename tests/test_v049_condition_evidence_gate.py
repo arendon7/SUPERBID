@@ -88,7 +88,7 @@ def test_readiness_and_due_diligence_column_contracts_are_append_only():
     readiness = sql.split("create or replace view public.dashboard_economic_readiness_current as", 1)[1]
     readiness = readiness.split("revoke all on public.dashboard_economic_readiness_current", 1)[0]
     projection = readiness.split("select\n  x.external_lot_id", 1)[1].split("from blockers x", 1)[0]
-    assert projection.index("d.fasecolda_match_interpretation") < projection.index("x.condition_disposition_status")
+    assert projection.rindex("d.fasecolda_match_interpretation") < projection.rindex("x.condition_disposition_status")
 
     old = V46.read_text(encoding="utf-8")
     old_prefix = old.split("'DUE_DILIGENCE_PRIORITY_NOT_BUY_SIGNAL'::text as due_diligence_interpretation", 1)[0]
