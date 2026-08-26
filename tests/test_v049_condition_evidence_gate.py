@@ -167,8 +167,16 @@ def test_readiness_routes_new_condition_actions_without_write_authority():
     assert rpc_names(ts) == {"dashboard_token_valid"}
 
 
-def test_v049_package_version_is_consistent():
+def _version_tuple(text: str, pattern: str) -> tuple[int, int, int]:
+    m = re.search(pattern, text)
+    assert m
+    return tuple(int(part) for part in m.group(1).split("."))
+
+
+def test_v049_package_version_is_consistent_in_forward_releases():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
-    assert 'version = "0.49.0"' in pyproject
-    assert '__version__ = "0.49.0"' in package
+    project_version = _version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
+    package_version = _version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
+    assert project_version == package_version
+    assert project_version >= (0, 49, 0)
