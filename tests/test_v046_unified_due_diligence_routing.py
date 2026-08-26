@@ -74,7 +74,7 @@ def test_fasecolda_peritaje_commission_and_bid_keep_specialized_or_canonical_rou
     assert "CURRENT_BID_MISSING" in ts
 
 
-def test_fast_lane_is_exactly_documentary_market_plus_cost_blockers():
+def test_fast_lane_preserves_market_plus_cost_core_and_may_add_only_condition_gate():
     ts = dashboard()
     required = (
         "MARKET_NOT_VALIDATED",
@@ -83,9 +83,12 @@ def test_fast_lane_is_exactly_documentary_market_plus_cost_blockers():
         "LOT_COSTS_NOT_REVIEWED",
     )
     assert "function isFastLane" in ts
-    assert "bs.length===4" in ts
+    assert "required.every(b=>bs.includes(b))" in ts
+    assert "bs.length>=4&&bs.length<=5" in ts
+    assert 'allowed=new Set([...required,"CONDITION_RISK_UNREVIEWED","CONDITION_REPAIR_RESERVE_MISSING"])' in ts
     for blocker in required:
         assert blocker in ts
+    assert "CONDITION_RISK_DECLINED" not in ts.split("function isFastLane", 1)[1].split("function primaryWorkflow", 1)[0]
     assert "FAST LANE" in ts
     assert "DUE_DILIGENCE_ROUTING_NOT_BUY_SIGNAL" in ts
     doc = DOC.read_text(encoding="utf-8")
