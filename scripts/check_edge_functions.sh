@@ -32,6 +32,10 @@ if [[ ${#ENTRYPOINTS[@]} -ne ${#FUNCTION_DIRS[@]} ]]; then
   exit 1
 fi
 
+mapfile -t DENO_TESTS < <(
+  find "$FUNCTIONS_DIR" -mindepth 2 -type f -name '*_test.ts' -print | sort
+)
+
 printf 'Deno: '
 deno --version | head -n 1
 echo "Discovered ${#ENTRYPOINTS[@]} Supabase Edge Function entrypoints."
@@ -50,4 +54,21 @@ for entrypoint in "${ENTRYPOINTS[@]}"; do
   echo "::endgroup::"
 done
 
-echo "All ${#ENTRYPOINTS[@]} Supabase Edge Functions passed deno check."
+if [[ ${#DENO_TESTS[@]} -gt 0 ]]; then
+  echo "Discovered ${#DENO_TESTS[@]} Deno Edge unit test file(s)."
+  for test_file in "${DENO_TESTS[@]}"; do
+    relative="${test_file#$ROOT/}"
+    echo "::group::Edge unit test · $relative"
+    if ! deno test --quiet "$test_file"; then
+      echo "::endgroup::"
+      echo "::error file=$relative::Deno unit tests failed"
+      exit 1
+    fi
+    echo "PASS $relative"
+    echo "::endgroup::"
+  done
+else
+  echo "No Deno Edge unit tests discovered."
+fi
+
+echo "All ${#ENTRYPOINTS[@]} Supabase Edge Functions passed deno check; ${#DENO_TESTS[@]} Deno unit test file(s) passed."
