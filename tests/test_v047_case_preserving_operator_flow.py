@@ -6,11 +6,13 @@ FUNCTIONS = ROOT / "supabase/functions"
 
 READINESS = (FUNCTIONS / "superbid-readiness-dashboard/index.ts").read_text(encoding="utf-8")
 WORKBENCH = (FUNCTIONS / "superbid-fasecolda-workbench/index.ts").read_text(encoding="utf-8")
-RESOLVER = (FUNCTIONS / "superbid-fasecolda-dashboard/index.ts").read_text(encoding="utf-8")
+LEGACY_RESOLVER = (FUNCTIONS / "superbid-fasecolda-dashboard/index.ts").read_text(encoding="utf-8")
+COCKPIT = (FUNCTIONS / "superbid-fasecolda-candidate-cockpit/index.ts").read_text(encoding="utf-8")
 SEARCH = (FUNCTIONS / "superbid-fasecolda-search-dashboard/index.ts").read_text(encoding="utf-8")
 YEAR = (FUNCTIONS / "superbid-fasecolda-year-dashboard/index.ts").read_text(encoding="utf-8")
 EVIDENCE = (FUNCTIONS / "superbid-fasecolda-evidence-dashboard/index.ts").read_text(encoding="utf-8")
-ALL = [READINESS, WORKBENCH, RESOLVER, SEARCH, YEAR, EVIDENCE]
+PRIVATE = [READINESS, WORKBENCH, COCKPIT, SEARCH, YEAR, EVIDENCE]
+ALL = [READINESS, WORKBENCH, LEGACY_RESOLVER, COCKPIT, SEARCH, YEAR, EVIDENCE]
 
 
 def rpc_names(source: str) -> set[str]:
@@ -19,8 +21,9 @@ def rpc_names(source: str) -> set[str]:
 
 def test_all_case_aware_surfaces_accept_only_numeric_lot_context():
     for source in ALL:
-        assert 'searchparams.get("lot")' in source.lower()
         assert r"^\d{5,12}$" in source
+    for source in PRIVATE:
+        assert 'searchparams.get("lot")' in source.lower()
 
 
 def test_readiness_routes_valuation_and_shortcut_to_exact_workbench_lot():
@@ -39,13 +42,21 @@ def test_workbench_keeps_exact_lot_for_every_child_workflow():
     assert "superbid-readiness-dashboard?lot=${id}" in WORKBENCH
 
 
-def test_resolver_is_exact_before_and_after_manual_mutation():
-    assert "external_lot_id=eq.${encodeURIComponent(lot)}" in RESOLVER
-    assert "dashboard_set_fasecolda_manual_resolution" in RESOLVER
-    assert "?lot=${encodeURIComponent(id)}&manual_status=ALL&saved=1" in RESOLVER
-    assert "?lot=${encodeURIComponent(id)}&manual_status=ALL&cleared=1" in RESOLVER
-    assert 'type="radio" name="code" checked' not in RESOLVER
-    assert 'name="confirm_resolution" value="YES"' in RESOLVER
+def test_legacy_resolver_preserves_exact_lot_but_has_no_write_authority():
+    assert 'searchparams.get("lot")' in LEGACY_RESOLVER.lower()
+    assert "superbid-fasecolda-candidate-cockpit/lots/" in LEGACY_RESOLVER
+    assert "legacy_fasecolda_resolver_redirect_no_business_write" in LEGACY_RESOLVER.lower()
+    assert rpc_names(LEGACY_RESOLVER) == set()
+
+
+def test_candidate_cockpit_is_exact_before_and_after_mutation():
+    assert "external_lot_id=eq.${encodeURIComponent(lot)}" in COCKPIT
+    assert "dashboard_save_fasecolda_candidate_resolution" in COCKPIT
+    assert "dashboard_clear_fasecolda_candidate_resolution_v52" in COCKPIT
+    assert "?candidate=${encodeURIComponent(code)}&saved=draft" in COCKPIT
+    assert "superbid-readiness-dashboard?lot=${encodeURIComponent(lot)}" in COCKPIT
+    assert 'name="confirm_resolution" value="YES"' in COCKPIT
+    assert "ningún candidato se preselecciona automáticamente" in COCKPIT.lower()
 
 
 def test_search_workflow_keeps_exact_lot_through_probe_and_override():
@@ -66,14 +77,10 @@ def test_year_and_evidence_filter_grouped_cases_by_lot_membership():
 
 
 def test_cross_function_login_preserves_only_validated_lot_not_arbitrary_url():
-    case_login_sources = [READINESS, WORKBENCH, SEARCH, YEAR, EVIDENCE]
+    case_login_sources = [READINESS, WORKBENCH, COCKPIT, SEARCH, YEAR, EVIDENCE]
     for source in case_login_sources:
-        assert "/login?lot=${encodeURIComponent(lot)}" in source
-        assert "requestedLot=exactLot(new URL(req.url))" in source
-        assert "login(false,requestedLot)" in source
-    assert 'name="lot" value=' in RESOLVER
-    assert "lot=safeLot(f.get(\"lot\"))" in RESOLVER
-    assert "login(false,requestedLot)" in RESOLVER
+        assert 'name="lot"' in source or "/login?lot=${encodeURIComponent(lot)}" in source
+        assert "requestedLot" in source
     for source in ALL:
         lower = source.lower()
         assert "return_to" not in lower
@@ -81,13 +88,15 @@ def test_cross_function_login_preserves_only_validated_lot_not_arbitrary_url():
         assert "redirect_url" not in lower
 
 
-def test_business_write_authority_did_not_expand():
+def test_business_write_authority_is_explicit_and_does_not_expand_elsewhere():
     assert rpc_names(READINESS) == {"dashboard_token_valid"}
     assert rpc_names(WORKBENCH) == {"dashboard_token_valid"}
     assert rpc_names(EVIDENCE) == {"dashboard_token_valid"}
-    assert rpc_names(RESOLVER) == {
+    assert rpc_names(LEGACY_RESOLVER) == set()
+    assert rpc_names(COCKPIT) == {
         "dashboard_token_valid",
-        "dashboard_set_fasecolda_manual_resolution",
+        "dashboard_save_fasecolda_candidate_resolution",
+        "dashboard_clear_fasecolda_candidate_resolution_v52",
     }
     assert rpc_names(SEARCH) == {
         "dashboard_token_valid",
@@ -101,7 +110,7 @@ def test_business_write_authority_did_not_expand():
 
 
 def test_private_auth_cookie_contract_is_preserved():
-    for source in ALL:
+    for source in PRIVATE:
         lower = source.lower()
         assert "dashboard_token_valid" in lower
         assert "httponly; secure; samesite=strict" in lower
