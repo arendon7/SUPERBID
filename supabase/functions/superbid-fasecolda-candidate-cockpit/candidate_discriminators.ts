@@ -39,8 +39,10 @@ function normalizeText(value: unknown): string {
     .replace(/\s+/g, " ");
 }
 
+// Must mirror the duplicate-description identity gate from v0.52:
+// regexp_replace(upper(trim(description)), '[[:space:]]+', ' ', 'g').
 function normalizedDescription(value: unknown): string {
-  return normalizeText(value);
+  return String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
 function literalTokens(value: unknown): string[] {
