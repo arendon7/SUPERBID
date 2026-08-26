@@ -77,7 +77,8 @@ def test_readiness_dashboard_surfaces_origin_and_routes_valuation_review():
     assert "fasecolda_match_origin" in READY
     assert "fasecolda_automatic_status" in READY
     assert "fasecolda_match_interpretation" in READY
-    assert "provenance fasecolda manual continúa visible" in READY
+    assert "esc(x.fasecolda_match_origin" in READY
+    assert "auto ${esc(x.fasecolda_automatic_status" in READY
     assert "/functions/v1/superbid-fasecolda-workbench" in READY
     assert 'a==="review_valuation"' in READY
 

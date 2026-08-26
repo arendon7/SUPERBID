@@ -6,8 +6,8 @@ V46 = (ROOT / "supabase/migrations/20260825200000_due_diligence_fasecolda_proven
 
 
 def test_readiness_dashboard_preserves_v031_contract_through_canonical_due_diligence_view():
-    # v0.46 no recomputes economic readiness in the UI. The canonical due-
-    # diligence view is explicitly derived from the v0.31 readiness contract.
+    # Later waves do not recompute economic readiness in the UI. The canonical
+    # due-diligence view remains derived from the readiness contract.
     assert "dashboard_due_diligence_queue" in DASH
     assert "dashboard_economic_readiness_current r" in V46
     assert "blocker_count.asc" in DASH
@@ -17,9 +17,12 @@ def test_readiness_dashboard_preserves_v031_contract_through_canonical_due_dilig
 
 def test_ready_is_never_presented_as_buy_signal():
     assert "economic_readiness_not_buy_signal" in DASH
+    assert "due_diligence_routing_not_buy_signal" in DASH
     assert "ready_for_decision" in DASH
     assert "nunca significa comprar" in DASH
-    assert "no modifican score, puja máxima, roi ni decisión final" in DASH
+    assert "final_decision=" not in DASH
+    assert "max_bid_market_validated_cop=" not in DASH
+    assert "expected_roi_current_pct=" not in DASH
 
 
 def test_dashboard_exposes_blockers_and_next_action_filters():

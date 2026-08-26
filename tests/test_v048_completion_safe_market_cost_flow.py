@@ -108,8 +108,13 @@ def test_private_auth_cookie_contract_is_preserved():
         assert 'deno.env.get("supabase_service_role_key")' in lower
 
 
-def test_v048_package_version_is_consistent():
+def test_v048_package_version_is_consistent_and_never_regresses():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
-    assert 'version = "0.48.0"' in pyproject
-    assert '__version__ = "0.48.0"' in package
+    p = re.search(r'^version = "(\d+)\.(\d+)\.(\d+)"$', pyproject, re.MULTILINE)
+    q = re.search(r'^__version__ = "(\d+)\.(\d+)\.(\d+)"$', package, re.MULTILINE)
+    assert p and q
+    pv = tuple(map(int, p.groups()))
+    qv = tuple(map(int, q.groups()))
+    assert pv == qv
+    assert pv >= (0, 48, 0)
