@@ -5,12 +5,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIG = ROOT / "supabase/migrations/20260826020000_fasecolda_candidate_resolution_evidence_v52.sql"
+HARDEN = ROOT / "supabase/migrations/20260826020500_fasecolda_candidate_resolution_gate_hardening_v52.sql"
 COCKPIT = ROOT / "supabase/functions/superbid-fasecolda-candidate-cockpit/index.ts"
 LEGACY = ROOT / "supabase/functions/superbid-fasecolda-dashboard/index.ts"
 
 
 def sql() -> str:
     return MIG.read_text(encoding="utf-8")
+
+
+def hardening_sql() -> str:
+    return HARDEN.read_text(encoding="utf-8")
 
 
 def cockpit() -> str:
@@ -47,6 +52,22 @@ def test_legacy_manual_resolution_is_backend_gated_by_reviewed_v052_snapshot():
     assert "new.chosen_code is distinct from e.chosen_code" in s
     assert "new.chosen_value_cop is distinct from e.chosen_value_cop" in s
     assert "new.source_evaluated_at is distinct from e.source_evaluated_at" in s
+
+
+def test_defense_in_depth_revalidates_direct_service_role_evidence_before_high():
+    s = hardening_sql().lower()
+    assert "malformed direct service-role evidence write" in s
+    assert "reviewed evidence dimensions must be an object" in s
+    assert "reviewed evidence missing or invalid dimension" in s
+    assert "reviewed evidence contains unresolved status" in s
+    assert "reviewed evidence source is not registered for lot dimension" in s
+    assert "reviewed evidence requires an explicit non-line discriminating match" in s
+    assert "reviewed evidence counters do not match dimensions" in s
+    assert "reviewed evidence candidate is no longer current" in s
+    assert "reviewed evidence candidate is not uniquely distinguishable" in s
+    assert "new manual resolution requires ambiguous or medium automatic status" in s
+    assert "manual fasecolda resolution must match current v0.52 reviewed evidence and candidate snapshot" in s
+    assert "new.model_year is distinct from c.model_year" in s
 
 
 def test_reviewed_contract_requires_all_six_dimensions_no_conflict_and_explicit_discriminator():
@@ -151,7 +172,7 @@ def test_cockpit_has_two_step_candidate_selection_and_never_auto_picks_best_scor
     assert "const requested=" in t
     assert "persisted=evidence" in t
     assert "selected=candidatecodes.has(requested)" in t
-    assert "best_code||" in t  # displayed as automatic provenance only
+    assert "best_code||" in t
     selection = t[t.index("const requested="):t.index("const selectedcandidate=")]
     assert "best_code" not in selection
     assert "best_score" not in selection
