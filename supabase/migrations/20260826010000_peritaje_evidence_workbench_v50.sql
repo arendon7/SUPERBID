@@ -11,6 +11,7 @@ create table if not exists public.lot_peritaje_evidence_reviews(
   dimensions jsonb not null default '{}'::jsonb,
   overall_risk text,
   evidence_completeness smallint not null default 0,
+  not_evaluable_count smallint not null default 0,
   repair_low_cop numeric,
   repair_base_cop numeric,
   repair_high_cop numeric,
@@ -22,6 +23,7 @@ create table if not exists public.lot_peritaje_evidence_reviews(
   interpretation text not null default 'MANUAL_PERITAJE_EVIDENCE_NOT_AUTOMATED_DIAGNOSIS_OR_BUY_SIGNAL',
   constraint lot_peritaje_evidence_dimensions_object check(jsonb_typeof(dimensions)='object'),
   constraint lot_peritaje_evidence_completeness_range check(evidence_completeness between 0 and 8),
+  constraint lot_peritaje_evidence_not_evaluable_range check(not_evaluable_count between 0 and 8),
   constraint lot_peritaje_evidence_overall_allowed check(overall_risk is null or overall_risk in ('LOW','MEDIUM','HIGH','CRITICAL','NOT_EVALUABLE')),
   constraint lot_peritaje_evidence_repair_nonnegative check(coalesce(repair_low_cop,0)>=0 and coalesce(repair_base_cop,0)>=0 and coalesce(repair_high_cop,0)>=0),
   constraint lot_peritaje_evidence_repair_order check(repair_low_cop is null or repair_base_cop is null or repair_high_cop is null or (repair_low_cop<=repair_base_cop and repair_base_cop<=repair_high_cop)),
@@ -38,6 +40,7 @@ create table if not exists public.lot_peritaje_evidence_review_history(
   dimensions jsonb not null default '{}'::jsonb,
   overall_risk text,
   evidence_completeness smallint not null default 0,
+  not_evaluable_count smallint not null default 0,
   repair_low_cop numeric,
   repair_base_cop numeric,
   repair_high_cop numeric,
@@ -48,6 +51,7 @@ create table if not exists public.lot_peritaje_evidence_review_history(
   interpretation text not null default 'MANUAL_PERITAJE_EVIDENCE_NOT_AUTOMATED_DIAGNOSIS_OR_BUY_SIGNAL',
   constraint lot_peritaje_evidence_history_dimensions_object check(jsonb_typeof(dimensions)='object'),
   constraint lot_peritaje_evidence_history_completeness_range check(evidence_completeness between 0 and 8),
+  constraint lot_peritaje_evidence_history_not_evaluable_range check(not_evaluable_count between 0 and 8),
   constraint lot_peritaje_evidence_history_overall_allowed check(overall_risk is null or overall_risk in ('LOW','MEDIUM','HIGH','CRITICAL','NOT_EVALUABLE')),
   constraint lot_peritaje_evidence_history_repair_nonnegative check(coalesce(repair_low_cop,0)>=0 and coalesce(repair_base_cop,0)>=0 and coalesce(repair_high_cop,0)>=0),
   constraint lot_peritaje_evidence_history_repair_order check(repair_low_cop is null or repair_base_cop is null or repair_high_cop is null or (repair_low_cop<=repair_base_cop and repair_base_cop<=repair_high_cop)),
@@ -101,7 +105,8 @@ begin
   documentation:=nullif(upper(trim(coalesce(e.dimensions->'documentation'->>'risk',''))),'');
   missing_parts:=nullif(upper(trim(coalesce(e.dimensions->'missing_parts'->>'risk',''))),'');
 
-  if new.source_attachment_url is distinct from e.source_attachment_url
+  if new.external_lot_id is distinct from e.external_lot_id
+     or new.source_attachment_url is distinct from e.source_attachment_url
      or new.mechanical_risk is distinct from mechanical
      or new.transmission_risk is distinct from transmission
      or new.body_risk is distinct from body
@@ -155,6 +160,7 @@ declare
   v_score integer:=0;
   v_overall text;
   v_complete smallint:=0;
+  v_not_evaluable smallint:=0;
   v_reviewed_at timestamptz;
   v_basis text:=nullif(trim(coalesce(p_repair_basis_note,'')),'');
   v_general text:=nullif(trim(coalesce(p_general_notes,'')),'');
@@ -182,7 +188,7 @@ begin
   if p_mark_reviewed and p_source_attachment_url is null then raise exception 'reviewed evidence requires source peritaje url'; end if;
 
   if jsonb_typeof(v_dimensions)<>'object' then raise exception 'dimensions must be a json object'; end if;
-  if exists(select 1 from jsonb_object_keys(v_dimensions) k where not (k=any(v_required))) then
+  if exists(select 1 from jsonb_object_keys(v_dimensions) as keys(k) where not (k=any(v_required))) then
     raise exception 'unknown peritaje evidence dimension';
   end if;
 
@@ -196,6 +202,7 @@ begin
       if v_note is not null and char_length(v_note)>1000 then raise exception 'evidence note too long for dimension %',v_dim; end if;
       if v_page is not null and char_length(v_page)>120 then raise exception 'page reference too long for dimension %',v_dim; end if;
       if v_risk is not null and v_note is not null and char_length(v_note)>=10 then v_complete:=v_complete+1; end if;
+      if v_risk='NOT_EVALUABLE' then v_not_evaluable:=v_not_evaluable+1; end if;
       if p_mark_reviewed and (v_risk is null or v_note is null or char_length(v_note)<10) then
         raise exception 'reviewed evidence requires risk and note >=10 chars for dimension %',v_dim;
       end if;
@@ -224,7 +231,13 @@ begin
     end if;
   end if;
 
-  v_overall:=case v_score when 4 then 'CRITICAL' when 3 then 'HIGH' when 2 then 'MEDIUM' when 1 then 'LOW' else 'NOT_EVALUABLE' end;
+  v_overall:=case
+    when v_score=4 then 'CRITICAL'
+    when v_score=3 then 'HIGH'
+    when v_score=2 then 'MEDIUM'
+    when v_score=1 and v_not_evaluable=0 then 'LOW'
+    else 'NOT_EVALUABLE'
+  end;
   v_reviewed_at:=case when p_mark_reviewed then clock_timestamp() else null end;
 
   v_mechanical:=nullif(upper(trim(coalesce(v_dimensions->'mechanical'->>'risk',''))),'');
@@ -237,10 +250,10 @@ begin
   v_missing_parts:=nullif(upper(trim(coalesce(v_dimensions->'missing_parts'->>'risk',''))),'');
 
   insert into public.lot_peritaje_evidence_reviews(
-    lot_id,external_lot_id,source_attachment_url,dimensions,overall_risk,evidence_completeness,
+    lot_id,external_lot_id,source_attachment_url,dimensions,overall_risk,evidence_completeness,not_evaluable_count,
     repair_low_cop,repair_base_cop,repair_high_cop,repair_basis_note,general_notes,reviewed_at,updated_at
   ) values(
-    v_lot_id,p_external_lot_id,p_source_attachment_url,v_dimensions,v_overall,v_complete,
+    v_lot_id,p_external_lot_id,p_source_attachment_url,v_dimensions,v_overall,v_complete,v_not_evaluable,
     p_repair_low_cop,p_repair_base_cop,p_repair_high_cop,v_basis,v_general,v_reviewed_at,clock_timestamp()
   ) on conflict(lot_id) do update set
     external_lot_id=excluded.external_lot_id,
@@ -248,6 +261,7 @@ begin
     dimensions=excluded.dimensions,
     overall_risk=excluded.overall_risk,
     evidence_completeness=excluded.evidence_completeness,
+    not_evaluable_count=excluded.not_evaluable_count,
     repair_low_cop=excluded.repair_low_cop,
     repair_base_cop=excluded.repair_base_cop,
     repair_high_cop=excluded.repair_high_cop,
@@ -257,10 +271,10 @@ begin
     updated_at=clock_timestamp();
 
   insert into public.lot_peritaje_evidence_review_history(
-    lot_id,external_lot_id,source_attachment_url,dimensions,overall_risk,evidence_completeness,
+    lot_id,external_lot_id,source_attachment_url,dimensions,overall_risk,evidence_completeness,not_evaluable_count,
     repair_low_cop,repair_base_cop,repair_high_cop,repair_basis_note,general_notes,marked_reviewed
   ) values(
-    v_lot_id,p_external_lot_id,p_source_attachment_url,v_dimensions,v_overall,v_complete,
+    v_lot_id,p_external_lot_id,p_source_attachment_url,v_dimensions,v_overall,v_complete,v_not_evaluable,
     p_repair_low_cop,p_repair_base_cop,p_repair_high_cop,v_basis,v_general,p_mark_reviewed
   );
 
@@ -306,6 +320,7 @@ begin
     'external_lot_id',p_external_lot_id,
     'reviewed',p_mark_reviewed,
     'evidence_completeness',v_complete,
+    'not_evaluable_count',v_not_evaluable,
     'overall_risk',v_overall,
     'diagnosis_generated',false,
     'buy_signal',false,
@@ -344,6 +359,7 @@ select
   e.dimensions,
   e.overall_risk,
   coalesce(e.evidence_completeness,0) as evidence_completeness,
+  coalesce(e.not_evaluable_count,0) as not_evaluable_count,
   e.repair_low_cop,
   e.repair_base_cop,
   e.repair_high_cop,
@@ -361,4 +377,4 @@ revoke all on public.dashboard_peritaje_evidence_workbench_v50 from public,anon,
 grant select on public.dashboard_peritaje_evidence_workbench_v50 to service_role;
 
 comment on view public.dashboard_peritaje_evidence_workbench_v50 is
-'v0.50 human evidence workbench for public peritaje PDFs. Eight structured dimensions and repair basis are required for REVIEWED. NOT automated diagnosis, buy signal, or automatic cost transfer.';
+'v0.50 human evidence workbench for public peritaje PDFs. Eight structured dimensions and repair basis are required for REVIEWED. NOT_EVALUABLE uncertainty remains explicit. NOT automated diagnosis, buy signal, or automatic cost transfer.';
