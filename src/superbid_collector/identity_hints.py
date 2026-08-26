@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 IDENTITY_HINT_GUARDRAIL = "AUTOMATED_IDENTITY_HINT_NOT_HUMAN_EVIDENCE_OR_MATCH"
+ENGINE_CC_NOMINAL_TOLERANCE = 50
 
 ENGINE_CC_RE = re.compile(r"\b(\d{3,5})\s*CC\b", re.I)
 
@@ -78,6 +79,18 @@ def extract_vehicle_identity_hints(text: str | None) -> VehicleIdentityHints:
     )
 
 
+def _comparison_status(key: str, lot_value: object, candidate_value: object) -> str:
+    if lot_value is None:
+        return "LOT_UNKNOWN"
+    if candidate_value is None:
+        return "CANDIDATE_UNKNOWN"
+    if lot_value == candidate_value:
+        return "CONSISTENT"
+    if key == "engine_cc" and abs(int(lot_value) - int(candidate_value)) <= ENGINE_CC_NOMINAL_TOLERANCE:
+        return "NOMINAL_COMPATIBLE"
+    return "DIFFERS"
+
+
 def compare_vehicle_identity_hints(
     lot_text: str | None, candidate_text: str | None
 ) -> dict[str, dict[str, object]]:
@@ -87,17 +100,9 @@ def compare_vehicle_identity_hints(
     for key in ("engine_cc", "transmission", "drivetrain", "fuel"):
         lot_value = lot[key]
         candidate_value = candidate[key]
-        if lot_value is None:
-            status = "LOT_UNKNOWN"
-        elif candidate_value is None:
-            status = "CANDIDATE_UNKNOWN"
-        elif lot_value == candidate_value:
-            status = "CONSISTENT"
-        else:
-            status = "DIFFERS"
         out[key] = {
             "lot": lot_value,
             "candidate": candidate_value,
-            "status": status,
+            "status": _comparison_status(key, lot_value, candidate_value),
         }
     return out
