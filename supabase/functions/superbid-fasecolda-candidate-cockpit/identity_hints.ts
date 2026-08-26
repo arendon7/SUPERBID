@@ -1,4 +1,5 @@
 export const IDENTITY_HINT_GUARDRAIL = "AUTOMATED_IDENTITY_HINT_NOT_HUMAN_EVIDENCE_OR_MATCH";
+export const ENGINE_CC_NOMINAL_TOLERANCE = 50;
 
 export type IdentityHints = {
   engineCc: number | null;
@@ -7,7 +8,7 @@ export type IdentityHints = {
   fuel: "GASOLINE" | "DIESEL" | "HYBRID" | "ELECTRIC" | "CNG" | null;
 };
 
-export type HintComparisonStatus = "CONSISTENT" | "DIFFERS" | "LOT_UNKNOWN" | "CANDIDATE_UNKNOWN";
+export type HintComparisonStatus = "CONSISTENT" | "NOMINAL_COMPATIBLE" | "DIFFERS" | "LOT_UNKNOWN" | "CANDIDATE_UNKNOWN";
 export type HintComparison = {
   lot: string | number | null;
   candidate: string | number | null;
@@ -69,11 +70,21 @@ function compareOne(lot: string | number | null, candidate: string | number | nu
   return { lot, candidate, status: lot === candidate ? "CONSISTENT" : "DIFFERS" };
 }
 
+function compareEngineCc(lot: number | null, candidate: number | null): HintComparison {
+  if (lot == null) return { lot, candidate, status: "LOT_UNKNOWN" };
+  if (candidate == null) return { lot, candidate, status: "CANDIDATE_UNKNOWN" };
+  if (lot === candidate) return { lot, candidate, status: "CONSISTENT" };
+  if (Math.abs(lot - candidate) <= ENGINE_CC_NOMINAL_TOLERANCE) {
+    return { lot, candidate, status: "NOMINAL_COMPATIBLE" };
+  }
+  return { lot, candidate, status: "DIFFERS" };
+}
+
 export function compareVehicleIdentityHints(lotText: unknown, candidateText: unknown) {
   const lot = extractVehicleIdentityHints(lotText);
   const candidate = extractVehicleIdentityHints(candidateText);
   return {
-    engine_cc: compareOne(lot.engineCc, candidate.engineCc),
+    engine_cc: compareEngineCc(lot.engineCc, candidate.engineCc),
     transmission: compareOne(lot.transmission, candidate.transmission),
     drivetrain: compareOne(lot.drivetrain, candidate.drivetrain),
     fuel: compareOne(lot.fuel, candidate.fuel),
