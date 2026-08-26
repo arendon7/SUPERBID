@@ -24,7 +24,8 @@ def test_python_and_edge_helpers_share_the_same_guardrail_dimensions_and_nominal
     guardrail = "AUTOMATED_IDENTITY_HINT_NOT_HUMAN_EVIDENCE_OR_MATCH"
     assert guardrail in PY_HINTS
     assert guardrail in EDGE_HINTS
-    assert guardrail in COCKPIT
+    assert "IDENTITY_HINT_GUARDRAIL" in COCKPIT
+    assert 'from "./identity_hints.ts"' in COCKPIT
     for token in ("engine_cc", "transmission", "drivetrain", "fuel"):
         assert token in PY_HINTS
         assert token in EDGE_HINTS
