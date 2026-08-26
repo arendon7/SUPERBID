@@ -1,7 +1,7 @@
 -- SUPERBID v0.52 · Fasecolda Candidate Resolution Evidence Gate
 -- Manual confirmation may elevate the effective Fasecolda provenance to HIGH,
 -- therefore exact-code confirmation requires structured, source-bound human evidence.
--- This migration does not create an automatic match or a buy signal.
+-- This migration does not create an automatic match, economic write, or buy signal.
 
 create table if not exists public.lot_fasecolda_candidate_resolution_evidence(
   id bigint generated always as identity primary key,
@@ -33,7 +33,9 @@ create table if not exists public.lot_fasecolda_candidate_resolution_evidence(
   constraint fasecolda_candidate_evidence_not_stated_range check(not_stated_count between 0 and 6),
   constraint fasecolda_candidate_evidence_discriminating_range check(discriminating_match_count between 0 and 5),
   constraint fasecolda_candidate_evidence_summary_len check(summary_note is null or char_length(summary_note)<=2000),
-  constraint fasecolda_candidate_evidence_interpretation_guard check(interpretation='MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL')
+  constraint fasecolda_candidate_evidence_interpretation_guard check(
+    interpretation='MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL'
+  )
 );
 
 create table if not exists public.lot_fasecolda_candidate_resolution_evidence_history(
@@ -65,18 +67,23 @@ create table if not exists public.lot_fasecolda_candidate_resolution_evidence_hi
   constraint fasecolda_candidate_evidence_history_not_stated_range check(not_stated_count between 0 and 6),
   constraint fasecolda_candidate_evidence_history_discriminating_range check(discriminating_match_count between 0 and 5),
   constraint fasecolda_candidate_evidence_history_summary_len check(summary_note is null or char_length(summary_note)<=2000),
-  constraint fasecolda_candidate_evidence_history_interpretation_guard check(interpretation='MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL')
+  constraint fasecolda_candidate_evidence_history_interpretation_guard check(
+    interpretation='MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL'
+  )
 );
 
 alter table public.lot_fasecolda_candidate_resolution_evidence enable row level security;
 alter table public.lot_fasecolda_candidate_resolution_evidence_history enable row level security;
-revoke all on public.lot_fasecolda_candidate_resolution_evidence,public.lot_fasecolda_candidate_resolution_evidence_history from public,anon,authenticated;
+revoke all on public.lot_fasecolda_candidate_resolution_evidence from public,anon,authenticated;
+revoke all on public.lot_fasecolda_candidate_resolution_evidence_history from public,anon,authenticated;
 grant select,insert,update,delete on public.lot_fasecolda_candidate_resolution_evidence to service_role;
 grant select,insert on public.lot_fasecolda_candidate_resolution_evidence_history to service_role;
 
 create index if not exists ix_fasecolda_candidate_evidence_history_lot_created
   on public.lot_fasecolda_candidate_resolution_evidence_history(lot_id,created_at desc);
 
+-- No write path, including the legacy manual-resolution RPC, may create/update
+-- MANUAL_CONFIRMED unless a reviewed v0.52 evidence snapshot exists and matches.
 create or replace function public.enforce_fasecolda_candidate_evidence_gate_v52()
 returns trigger
 language plpgsql
@@ -115,6 +122,8 @@ create trigger trg_fasecolda_candidate_evidence_gate_v52
 before insert or update on public.lot_fasecolda_manual_resolutions
 for each row execute function public.enforce_fasecolda_candidate_evidence_gate_v52();
 
+-- CLEAR remains explicit and reversible. Removing a manual HIGH invalidates the
+-- current evidence snapshot; append-only history remains for audit.
 create or replace function public.invalidate_fasecolda_candidate_evidence_after_manual_delete_v52()
 returns trigger
 language plpgsql
@@ -124,7 +133,10 @@ as $$
 declare
   e public.lot_fasecolda_candidate_resolution_evidence%rowtype;
 begin
-  select * into e from public.lot_fasecolda_candidate_resolution_evidence where lot_id=old.lot_id;
+  select * into e
+  from public.lot_fasecolda_candidate_resolution_evidence
+  where lot_id=old.lot_id;
+
   if e.id is null then return old; end if;
 
   insert into public.lot_fasecolda_candidate_resolution_evidence_history(
@@ -136,6 +148,7 @@ begin
     e.candidate_score,e.candidate_rank,e.source_evaluated_at,e.dimensions,e.source_urls,e.evidence_complete_count,
     e.match_count,e.conflict_count,e.not_stated_count,e.discriminating_match_count,e.summary_note
   );
+
   delete from public.lot_fasecolda_candidate_resolution_evidence where lot_id=old.lot_id;
   return old;
 end;
@@ -148,6 +161,8 @@ create trigger trg_fasecolda_candidate_evidence_manual_delete_v52
 after delete on public.lot_fasecolda_manual_resolutions
 for each row execute function public.invalidate_fasecolda_candidate_evidence_after_manual_delete_v52();
 
+-- Vehicle identity mutations invalidate any draft/reviewed candidate evidence.
+-- The existing v0.33 trigger separately invalidates the manual resolution.
 create or replace function public.invalidate_fasecolda_candidate_evidence_on_identity_change_v52()
 returns trigger
 language plpgsql
@@ -164,7 +179,10 @@ begin
     return new;
   end if;
 
-  select * into e from public.lot_fasecolda_candidate_resolution_evidence where lot_id=new.id;
+  select * into e
+  from public.lot_fasecolda_candidate_resolution_evidence
+  where lot_id=new.id;
+
   if e.id is null then return new; end if;
 
   insert into public.lot_fasecolda_candidate_resolution_evidence_history(
@@ -176,6 +194,7 @@ begin
     e.candidate_score,e.candidate_rank,e.source_evaluated_at,e.dimensions,e.source_urls,e.evidence_complete_count,
     e.match_count,e.conflict_count,e.not_stated_count,e.discriminating_match_count,e.summary_note
   );
+
   delete from public.lot_fasecolda_candidate_resolution_evidence where lot_id=new.id;
   return new;
 end;
@@ -188,6 +207,9 @@ create trigger trg_fasecolda_candidate_evidence_identity_change_v52
 after update of title,brand,line,model_year on public.auction_lots
 for each row execute function public.invalidate_fasecolda_candidate_evidence_on_identity_change_v52();
 
+-- Human evidence contract. DRAFT may be incomplete and never changes the
+-- effective Fasecolda match. REVIEWED requires all six dimensions, no conflict,
+-- line MATCH and at least one discriminating MATCH beyond line identity.
 create or replace function public.dashboard_save_fasecolda_candidate_resolution(
   p_external_lot_id text,
   p_code text,
@@ -228,13 +250,16 @@ begin
   end if;
   if p_code is null or trim(p_code)='' then raise exception 'candidate code required'; end if;
   if jsonb_typeof(v_dimensions)<>'object' then raise exception 'dimensions must be a json object'; end if;
-  if exists(select 1 from jsonb_object_keys(v_dimensions) as keys(k) where not (k=any(v_required))) then
-    raise exception 'unknown candidate evidence dimension';
-  end if;
+  if exists(
+    select 1 from jsonb_object_keys(v_dimensions) as k(key)
+    where not (key=any(v_required))
+  ) then raise exception 'unknown candidate evidence dimension'; end if;
   if v_summary is not null and char_length(v_summary)>2000 then raise exception 'summary note too long'; end if;
 
-  select * into v_lot from public.auction_lots
-  where external_lot_id=p_external_lot_id order by id desc limit 1;
+  select * into v_lot
+  from public.auction_lots
+  where external_lot_id=p_external_lot_id
+  order by id desc limit 1;
   if v_lot.id is null then raise exception 'lot not found'; end if;
 
   select * into v_auto from public.lot_fasecolda_matches where lot_id=v_lot.id;
@@ -248,39 +273,57 @@ begin
     raise exception 'candidate evidence confirmation is allowed only for AMBIGUOUS or MEDIUM automatic matches';
   end if;
 
-  select * into v_candidate from public.lot_fasecolda_candidates
-  where lot_id=v_lot.id and code=trim(p_code) limit 1;
+  select * into v_candidate
+  from public.lot_fasecolda_candidates
+  where lot_id=v_lot.id and code=trim(p_code)
+  limit 1;
   if v_candidate.lot_id is null then raise exception 'selected code is not a current candidate for this lot'; end if;
   if v_candidate.model_year is distinct from v_lot.model_year then raise exception 'candidate model year does not match lot'; end if;
   if v_candidate.current_value_cop is null or v_candidate.current_value_cop<=0 then raise exception 'candidate has no usable current value'; end if;
-  if not exists(select 1 from public.fasecolda_references r where r.code=v_candidate.code) then raise exception 'candidate reference not found'; end if;
-  if not public.fasecolda_line_compatible(v_lot.title,v_lot.brand,v_candidate.description) then raise exception 'candidate fails Fasecolda identity guard'; end if;
+  if not exists(select 1 from public.fasecolda_references r where r.code=v_candidate.code) then
+    raise exception 'candidate reference not found';
+  end if;
+  if not public.fasecolda_line_compatible(v_lot.title,v_lot.brand,v_candidate.description) then
+    raise exception 'candidate fails Fasecolda identity guard';
+  end if;
 
   foreach v_dim in array v_required loop
     if v_dimensions ? v_dim then
-      if jsonb_typeof(v_dimensions->v_dim)<>'object' then raise exception 'dimension % must be an object',v_dim; end if;
+      if jsonb_typeof(v_dimensions->v_dim)<>'object' then
+        raise exception 'dimension % must be an object',v_dim;
+      end if;
+
       v_status:=nullif(upper(trim(coalesce(v_dimensions->v_dim->>'status',''))),'');
       v_note:=nullif(trim(coalesce(v_dimensions->v_dim->>'evidence_note','')),'');
       v_observed:=nullif(trim(coalesce(v_dimensions->v_dim->>'observed_value','')),'');
       v_source:=nullif(trim(coalesce(v_dimensions->v_dim->>'source_url','')),'');
 
-      if v_status is not null and not(v_status=any(v_allowed)) then raise exception 'invalid evidence status for dimension %',v_dim; end if;
+      if v_status is not null and not(v_status=any(v_allowed)) then
+        raise exception 'invalid evidence status for dimension %',v_dim;
+      end if;
       if v_note is not null and char_length(v_note)>1000 then raise exception 'evidence note too long for dimension %',v_dim; end if;
       if v_observed is not null and char_length(v_observed)>500 then raise exception 'observed value too long for dimension %',v_dim; end if;
       if v_source is not null and char_length(v_source)>2000 then raise exception 'source url too long for dimension %',v_dim; end if;
-      if v_source is not null and v_source is distinct from v_lot.url and not exists(
-        select 1 from public.lot_attachments a where a.lot_id=v_lot.id and a.url=v_source
-      ) then raise exception 'evidence source does not belong to lot for dimension %',v_dim; end if;
+      if v_source is not null
+         and v_source is distinct from v_lot.url
+         and not exists(select 1 from public.lot_attachments a where a.lot_id=v_lot.id and a.url=v_source) then
+        raise exception 'evidence source does not belong to lot for dimension %',v_dim;
+      end if;
 
-      if v_status is not null and v_note is not null and char_length(v_note)>=10 and v_source is not null
+      if v_status is not null
+         and v_note is not null and char_length(v_note)>=10
+         and v_source is not null
          and (v_status='NOT_STATED' or v_observed is not null) then
         v_complete:=v_complete+1;
       end if;
+
       if v_status='MATCH' then
         v_matches:=v_matches+1;
         if v_dim<>'line_identity' then v_discriminating:=v_discriminating+1; end if;
-      elsif v_status='CONFLICT' then v_conflicts:=v_conflicts+1;
-      elsif v_status='NOT_STATED' then v_not_stated:=v_not_stated+1;
+      elsif v_status='CONFLICT' then
+        v_conflicts:=v_conflicts+1;
+      elsif v_status='NOT_STATED' then
+        v_not_stated:=v_not_stated+1;
       end if;
       if v_dim='line_identity' then v_line_status:=v_status; end if;
 
@@ -297,12 +340,12 @@ begin
     end if;
   end loop;
 
-  select coalesce(jsonb_agg(s order by s),'[]'::jsonb) into v_source_urls
+  select coalesce(jsonb_agg(src order by src),'[]'::jsonb) into v_source_urls
   from (
-    select distinct nullif(trim(value->>'source_url'),'') as s
-    from jsonb_each(v_dimensions)
-    where nullif(trim(value->>'source_url'),'') is not null
-  ) q;
+    select distinct nullif(trim(j.v->>'source_url'),'') as src
+    from jsonb_each(v_dimensions) as j(k,v)
+    where nullif(trim(j.v->>'source_url'),'') is not null
+  ) s;
 
   if p_mark_reviewed then
     if v_complete<>6 then raise exception 'reviewed candidate evidence requires all six dimensions complete'; end if;
@@ -310,13 +353,20 @@ begin
     if v_conflicts>0 then raise exception 'reviewed candidate evidence cannot contain CONFLICT'; end if;
     if v_discriminating<1 then raise exception 'reviewed candidate evidence requires at least one discriminating MATCH beyond line identity'; end if;
     if v_summary is null or char_length(v_summary)<20 then raise exception 'reviewed candidate evidence requires summary note of at least 20 characters'; end if;
+
+    -- If two current codes have the same normalized year/description, the public
+    -- candidate payload cannot distinguish them. Do not permit an arbitrary code pick.
     if exists(
-      select 1 from public.lot_fasecolda_candidates c
+      select 1
+      from public.lot_fasecolda_candidates c
       where c.lot_id=v_lot.id
         and c.code<>v_candidate.code
         and c.model_year is not distinct from v_candidate.model_year
-        and regexp_replace(upper(trim(c.description)),'\s+',' ','g')=regexp_replace(upper(trim(v_candidate.description)),'\s+',' ','g')
-    ) then raise exception 'candidate is not uniquely distinguishable from another current candidate'; end if;
+        and regexp_replace(upper(trim(c.description)),'[[:space:]]+',' ','g')=
+            regexp_replace(upper(trim(v_candidate.description)),'[[:space:]]+',' ','g')
+    ) then
+      raise exception 'candidate is not uniquely distinguishable from another current candidate';
+    end if;
   end if;
 
   v_reviewed_at:=case when p_mark_reviewed then clock_timestamp() else null end;
@@ -329,7 +379,8 @@ begin
     v_lot.id,v_lot.external_lot_id,v_candidate.code,v_candidate.description,v_candidate.current_value_cop,
     v_candidate.score,v_candidate.rank_no,v_candidate.evaluated_at,v_dimensions,v_source_urls,v_complete,v_matches,
     v_conflicts,v_not_stated,v_discriminating,v_summary,v_reviewed_at,clock_timestamp()
-  ) on conflict(lot_id) do update set
+  )
+  on conflict(lot_id) do update set
     external_lot_id=excluded.external_lot_id,
     chosen_code=excluded.chosen_code,
     chosen_description=excluded.chosen_description,
@@ -362,6 +413,7 @@ begin
     select public.dashboard_set_fasecolda_manual_resolution(
       v_lot.external_lot_id,'CONFIRM',v_candidate.code,v_summary
     ) into v_resolution;
+
     return v_resolution || jsonb_build_object(
       'candidate_evidence_reviewed',true,
       'evidence_complete_count',v_complete,
@@ -400,6 +452,42 @@ $$;
 revoke all on function public.dashboard_save_fasecolda_candidate_resolution(text,text,jsonb,text,boolean) from public,anon,authenticated;
 grant execute on function public.dashboard_save_fasecolda_candidate_resolution(text,text,jsonb,text,boolean) to service_role;
 
+create or replace function public.dashboard_clear_fasecolda_candidate_resolution_v52(
+  p_external_lot_id text,
+  p_note text
+) returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_catalog
+as $$
+declare
+  v_note text:=nullif(trim(coalesce(p_note,'')),'');
+  v_result jsonb;
+begin
+  if p_external_lot_id is null or p_external_lot_id !~ '^[0-9]{5,12}$' then
+    raise exception 'invalid external lot id';
+  end if;
+  if v_note is null or char_length(v_note)<10 then
+    raise exception 'clear requires note of at least 10 characters';
+  end if;
+  if char_length(v_note)>2000 then raise exception 'note too long'; end if;
+
+  select public.dashboard_set_fasecolda_manual_resolution(
+    p_external_lot_id,'CLEAR',null,v_note
+  ) into v_result;
+
+  return v_result || jsonb_build_object(
+    'candidate_evidence_invalidated',true,
+    'buy_signal',false,
+    'economic_fields_modified',false,
+    'interpretation','MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL'
+  );
+end;
+$$;
+
+revoke all on function public.dashboard_clear_fasecolda_candidate_resolution_v52(text,text) from public,anon,authenticated;
+grant execute on function public.dashboard_clear_fasecolda_candidate_resolution_v52(text,text) to service_role;
+
 create or replace view public.dashboard_fasecolda_candidate_resolution_cockpit_v52 as
 select
   r.*,
@@ -430,14 +518,17 @@ select
   e.updated_at as evidence_updated_at,
   'MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL'::text as evidence_interpretation
 from public.dashboard_fasecolda_resolution_queue r
-join public.auction_lots a using(lot_id)
-left join public.dashboard_fasecolda_valuation_workbench w using(lot_id)
-left join public.lot_fasecolda_candidate_resolution_evidence e using(lot_id)
+join public.auction_lots a on a.id=r.lot_id
+left join public.dashboard_fasecolda_valuation_workbench w on w.lot_id=r.lot_id
+left join public.lot_fasecolda_candidate_resolution_evidence e on e.lot_id=r.lot_id
 left join lateral (
-  select jsonb_agg(jsonb_build_object(
-    'id',x.id,'name',x.name,'url',x.url,'kind',x.kind,'source',x.source,'discovered_at',x.discovered_at
-  ) order by x.kind,x.id) as attachments
-  from public.lot_attachments x where x.lot_id=r.lot_id
+  select jsonb_agg(
+    jsonb_build_object(
+      'id',x.id,'name',x.name,'url',x.url,'kind',x.kind,'source',x.source,'discovered_at',x.discovered_at
+    ) order by x.kind,x.id
+  ) as attachments
+  from public.lot_attachments x
+  where x.lot_id=r.lot_id
 ) att on true;
 
 revoke all on public.dashboard_fasecolda_candidate_resolution_cockpit_v52 from public,anon,authenticated;
