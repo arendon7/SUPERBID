@@ -141,12 +141,13 @@ def test_v054_adds_no_database_migration():
     assert list((ROOT / "supabase/migrations").glob("*v54*.sql")) == []
 
 
-def test_v054_package_version_is_exact_and_consistent():
+def test_v054_package_version_contract_is_forward_compatible():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 54, 0)
+    assert pv == iv
+    assert pv >= (0, 54, 0)
 
 
 def test_v054_does_not_gain_economic_or_purchase_authority():

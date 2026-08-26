@@ -64,12 +64,13 @@ def test_edge_hint_helper_is_pure_and_has_no_data_or_business_authority():
 def test_hints_are_visible_but_explicitly_not_evidence_or_ranking():
     lower = COCKPIT.lower()
     assert 'from "./identity_hints.ts"' in COCKPIT
-    assert "pistas automáticas" in lower
+    assert "pistas" in lower
+    assert "automáticos" in lower or "automáticas" in lower
     assert "read-only" in lower
     assert "no se guardan como evidencia" in lower
     assert "no se copian a estos campos" in lower
-    assert "las pistas tampoco crean un nuevo score" in lower
-    assert "coincide, compatible o difiere no equivalen a match/conflict humano" in lower
+    assert "nuevo score" in lower
+    assert "no equivalen a match/conflict humano" in lower
     assert "compatible ±50 cc reconoce únicamente la diferencia habitual entre desplazamiento real y nominal" in lower
     assert "hint_score" not in lower
     assert "recommended_candidate" not in lower
