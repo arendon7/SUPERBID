@@ -50,7 +50,7 @@ def test_v060_sql_input_classifier_matches_v054_fail_closed_semantics():
     assert "public.vehicle_norm" in section
     assert "p_model_year is null or p_model_year < 1900 or p_model_year > 2100" in section
     for generic in ("COMBO", "AUTOMOVIL", "CAMION", "CAMIONETA", "VEHICULO", "VOLQUETA", "TRACTOCAMION", "TRACTOMULA", "BUS", "MICROBUS"):
-        assert f"'{generic}'" in section
+        assert f"'{generic.lower()}'" in section
     assert "identity_input_review" in section
     assert "missing_year" in section
     assert "explorable" in section
