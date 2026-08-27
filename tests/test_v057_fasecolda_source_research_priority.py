@@ -138,7 +138,8 @@ def test_v057_dashboard_metadata_priority_is_navigation_not_evidence():
     assert "source_research_priority_metadata_only_not_evidence_match_or_valuation" in lower
     assert "primera por metadata" in lower
     assert "la selección inicial es navegación, no conclusión" in lower
-    assert "la fuente marcada primero se selecciona únicamente para ahorrar navegación" in lower
+    assert "source_context_handoff_not_evidence_or_candidate_selection" in lower
+    assert "la fuente seleccionada puede acompañar la navegación al cockpit" in lower
     assert "metadata y su apertura no crean evidencia ni preseleccionan candidato" in lower
     assert "target literal del título · solo proxy read-only" in lower
     assert "public_lot_context" in lower
