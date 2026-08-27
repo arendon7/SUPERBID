@@ -67,12 +67,15 @@ def test_legacy_resolver_is_retired_without_losing_exact_lot_context():
 
 
 def test_candidate_cockpit_never_uses_automatic_best_as_a_selection():
-    assert "ningún candidato se preselecciona automáticamente" in COCKPIT
     assert "ningún código se elige automáticamente" in COCKPIT
     assert "const requested=" in COCKPIT
     assert "persisted=evidence" in COCKPIT
     assert "selected=candidatecodes.has(requested)" in COCKPIT
     assert "confirm_resolution" in COCKPIT
+    selection = COCKPIT[COCKPIT.index("const requested="):COCKPIT.index("const selectedcandidate=")]
+    assert "best_code" not in selection
+    assert "best_score" not in selection
+    assert "source" not in selection
 
 
 def test_candidate_cockpit_uses_evidence_rpc_not_legacy_confirm_rpc():
