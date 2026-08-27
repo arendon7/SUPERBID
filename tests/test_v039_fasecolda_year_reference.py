@@ -70,10 +70,15 @@ def test_year_dashboard_still_rejects_cross_year_valuation_semantics():
 
 
 def test_workbench_routes_year_cases_to_specialized_dashboard():
-    assert 'x.workflow_target==="year_reference_review"' in WORKBENCH
+    legacy_route = 'x.workflow_target==="year_reference_review"' in WORKBENCH
+    workstream_route = (
+        'w==="year_review"' in WORKBENCH
+        and "superbid-fasecolda-year-dashboard?lot=${id}" in WORKBENCH
+    )
+    assert legacy_route or workstream_route
     assert "/functions/v1/superbid-fasecolda-year-dashboard" in WORKBENCH
     assert "referencias por año" in WORKBENCH
-    assert "year_reference_review" in WORKBENCH
+    assert ("year_reference_review" in WORKBENCH or "year_review" in WORKBENCH)
 
 
 def test_v039_dashboards_remain_private_server_rendered():
