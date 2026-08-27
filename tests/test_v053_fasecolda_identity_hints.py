@@ -68,10 +68,11 @@ def test_hints_are_visible_but_explicitly_not_evidence_or_ranking():
     assert "automáticos" in lower or "automáticas" in lower
     assert "read-only" in lower
     assert "no se guardan como evidencia" in lower
-    assert "no se copian a estos campos" in lower
-    assert "nuevo score" in lower
+    assert "no prellenan el formulario humano" in lower
+    assert "ningún candidato, match, valor observado ni fuente de dimensión se prellena" in lower
+    assert "no crean ranking, homologación ni recomendación" in lower
     assert "no equivalen a match/conflict humano" in lower
-    assert "compatible ±50 cc reconoce únicamente la diferencia habitual entre desplazamiento real y nominal" in lower
+    assert "source_context_viewer_only_not_evidence_or_candidate_selection" in lower
     assert "hint_score" not in lower
     assert "recommended_candidate" not in lower
     assert "auto_select" not in lower
@@ -95,6 +96,7 @@ def test_candidate_selection_still_ignores_automatic_best_and_hint_outcomes():
     assert "best_code" not in selection
     assert "best_score" not in selection
     assert "hint" not in selection
+    assert "source" not in selection
     assert "selected=candidatecodes.has(requested)" in selection
     assert "ningún código se elige automáticamente" in lower
 
