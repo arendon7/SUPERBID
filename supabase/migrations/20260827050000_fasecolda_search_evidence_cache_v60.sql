@@ -8,6 +8,7 @@ create table if not exists public.fasecolda_search_term_evidence_current (
   code_count integer not null check (code_count between 0 and 22),
   codes jsonb not null default '[]'::jsonb check (jsonb_typeof(codes)='array'),
   detail_http_status integer check (detail_http_status is null or detail_http_status between 100 and 599),
+  detail_payload_valid boolean,
   details jsonb not null default '[]'::jsonb check (jsonb_typeof(details)='array'),
   source_search_url text not null,
   source_detail_url text,
@@ -24,6 +25,7 @@ create table if not exists public.fasecolda_search_term_evidence_history (
   code_count integer not null check (code_count between 0 and 22),
   codes jsonb not null check (jsonb_typeof(codes)='array'),
   detail_http_status integer check (detail_http_status is null or detail_http_status between 100 and 599),
+  detail_payload_valid boolean,
   details jsonb not null check (jsonb_typeof(details)='array'),
   source_search_url text not null,
   source_detail_url text,
@@ -100,6 +102,7 @@ declare
   v_codes_csv text;
   v_resp record;
   v_detail_status integer;
+  v_detail_payload_valid boolean;
   v_details jsonb := '[]'::jsonb;
   v_detail_count integer := 0;
   v_search_url text;
@@ -148,12 +151,18 @@ begin
       v_detail_url := 'https://fasecoldaback.quantil.co/api/listacodigosid/consultabycodigo/' || v_codes_csv;
       select * into v_resp from extensions.http_get(v_detail_url::varchar);
       v_detail_status := v_resp.status;
+      v_detail_payload_valid := false;
       if v_resp.status=200 then
         begin
           v_details := v_resp.content::jsonb;
-          if jsonb_typeof(v_details)<>'array' then v_details := '[]'::jsonb; end if;
+          if jsonb_typeof(v_details)='array' then
+            v_detail_payload_valid := true;
+          else
+            v_details := '[]'::jsonb;
+          end if;
         exception when others then
           v_details := '[]'::jsonb;
+          v_detail_payload_valid := false;
         end;
       end if;
     end if;
@@ -162,15 +171,16 @@ begin
   if jsonb_typeof(v_details)='array' then v_detail_count := jsonb_array_length(v_details); end if;
   v_fingerprint := md5(
     v_term || '|' || v_search_status::text || '|' || v_code_count::text || '|' ||
-    coalesce(v_detail_status::text,'') || '|' || v_codes::text || '|' || v_details::text
+    coalesce(v_detail_status::text,'') || '|' || coalesce(v_detail_payload_valid::text,'') || '|' ||
+    v_codes::text || '|' || v_details::text
   );
 
   insert into public.fasecolda_search_term_evidence_current(
-    search_term,search_http_status,code_count,codes,detail_http_status,details,
+    search_term,search_http_status,code_count,codes,detail_http_status,detail_payload_valid,details,
     source_search_url,source_detail_url,observed_for_external_lot_id,
     evidence_fingerprint,observed_at,interpretation
   ) values(
-    v_term,v_search_status,v_code_count,v_codes,v_detail_status,v_details,
+    v_term,v_search_status,v_code_count,v_codes,v_detail_status,v_detail_payload_valid,v_details,
     v_search_url,v_detail_url,v_lot.external_lot_id,
     v_fingerprint,v_observed_at,'FASECOLDA_SEARCH_EVIDENCE_NOT_OVERRIDE_MATCH_OR_VALUATION'
   )
@@ -179,6 +189,7 @@ begin
     code_count=excluded.code_count,
     codes=excluded.codes,
     detail_http_status=excluded.detail_http_status,
+    detail_payload_valid=excluded.detail_payload_valid,
     details=excluded.details,
     source_search_url=excluded.source_search_url,
     source_detail_url=excluded.source_detail_url,
@@ -188,11 +199,11 @@ begin
     interpretation=excluded.interpretation;
 
   insert into public.fasecolda_search_term_evidence_history(
-    search_term,search_http_status,code_count,codes,detail_http_status,details,
+    search_term,search_http_status,code_count,codes,detail_http_status,detail_payload_valid,details,
     source_search_url,source_detail_url,observed_for_external_lot_id,
     evidence_fingerprint,observed_at,interpretation
   ) values(
-    v_term,v_search_status,v_code_count,v_codes,v_detail_status,v_details,
+    v_term,v_search_status,v_code_count,v_codes,v_detail_status,v_detail_payload_valid,v_details,
     v_search_url,v_detail_url,v_lot.external_lot_id,
     v_fingerprint,v_observed_at,'FASECOLDA_SEARCH_EVIDENCE_NOT_OVERRIDE_MATCH_OR_VALUATION'
   );
@@ -204,6 +215,7 @@ begin
     'search_http_status',v_search_status,
     'code_count',v_code_count,
     'detail_http_status',v_detail_status,
+    'detail_payload_valid',v_detail_payload_valid,
     'detail_count',v_detail_count,
     'evidence_fingerprint',v_fingerprint,
     'observed_at',v_observed_at,
@@ -237,6 +249,7 @@ with base as (
     c.code_count as evidence_code_count,
     c.codes as evidence_codes,
     c.detail_http_status as evidence_detail_http_status,
+    c.detail_payload_valid as evidence_detail_payload_valid,
     c.details as evidence_details,
     c.source_search_url as evidence_search_url,
     c.source_detail_url as evidence_detail_url,
@@ -255,7 +268,7 @@ with base as (
   left join lateral (
     select count(distinct item->>'codigo')::integer as year_compatible_code_count
     from jsonb_array_elements(
-      case when jsonb_typeof(j.evidence_details)='array' then j.evidence_details else '[]'::jsonb end
+      case when j.evidence_detail_payload_valid is true and jsonb_typeof(j.evidence_details)='array' then j.evidence_details else '[]'::jsonb end
     ) item
     where exists (
       select 1
@@ -277,7 +290,7 @@ select
     when a.evidence_observed_at is null then 'SUGGESTED_EVIDENCE_MISSING'
     when not a.evidence_fresh then 'SUGGESTED_EVIDENCE_STALE'
     when coalesce(a.evidence_code_count,0)=0 then 'SUGGESTED_NO_CODES'
-    when coalesce(a.evidence_detail_http_status,0)<>200 then 'SUGGESTED_DETAIL_UNAVAILABLE'
+    when coalesce(a.evidence_detail_http_status,0)<>200 or a.evidence_detail_payload_valid is distinct from true then 'SUGGESTED_DETAIL_UNAVAILABLE'
     when a.year_compatible_code_count=0 then 'SUGGESTED_NO_YEAR_COMPATIBLE_CODES'
     else 'SUGGESTED_YEAR_COMPATIBLE_CODES'
   end as evidence_state,
@@ -286,7 +299,7 @@ select
     when a.input_disposition='MISSING_YEAR' then 'REVIEW_MODEL_YEAR_INPUT'
     when a.evidence_observed_at is null or not a.evidence_fresh then 'REFRESH_SUGGESTED_EVIDENCE'
     when coalesce(a.evidence_code_count,0)=0 then 'EXPLORE_ALTERNATE_VARIANTS'
-    when coalesce(a.evidence_detail_http_status,0)<>200 then 'REFRESH_SUGGESTED_EVIDENCE'
+    when coalesce(a.evidence_detail_http_status,0)<>200 or a.evidence_detail_payload_valid is distinct from true then 'REFRESH_SUGGESTED_EVIDENCE'
     when a.year_compatible_code_count=0 then 'REVIEW_YEAR_OR_ALTERNATE_TERM'
     else 'REVIEW_SUGGESTED_TERM'
   end as operator_next_action,
@@ -294,6 +307,7 @@ select
     when a.input_disposition='EXPLORABLE'
       and a.evidence_fresh
       and coalesce(a.evidence_detail_http_status,0)=200
+      and a.evidence_detail_payload_valid is true
       and a.year_compatible_code_count>0
       then true else false
   end as suggested_term_reviewable,
@@ -306,8 +320,8 @@ select
     when a.input_disposition='MISSING_YEAR' then 15
     when a.evidence_observed_at is null then 20
     when not a.evidence_fresh then 25
-    when coalesce(a.evidence_code_count,0)>0 and coalesce(a.evidence_detail_http_status,0)=200 and a.year_compatible_code_count>0 then 30
-    when coalesce(a.evidence_code_count,0)>0 and coalesce(a.evidence_detail_http_status,0)=200 and a.year_compatible_code_count=0 then 40
+    when coalesce(a.evidence_code_count,0)>0 and coalesce(a.evidence_detail_http_status,0)=200 and a.evidence_detail_payload_valid is true and a.year_compatible_code_count>0 then 30
+    when coalesce(a.evidence_code_count,0)>0 and coalesce(a.evidence_detail_http_status,0)=200 and a.evidence_detail_payload_valid is true and a.year_compatible_code_count=0 then 40
     when coalesce(a.evidence_code_count,0)=0 then 50
     else 60
   end as evidence_state_rank,
