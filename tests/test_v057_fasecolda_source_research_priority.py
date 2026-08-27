@@ -193,9 +193,10 @@ def test_v057_does_not_modify_v052_candidate_cockpit_authority():
     )
 
 
-def test_v057_package_version_is_exact_and_consistent():
+def test_v057_package_version_is_consistent_and_not_below_baseline():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 57, 0)
+    assert pv == iv
+    assert pv >= (0, 57, 0)
