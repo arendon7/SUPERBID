@@ -169,7 +169,6 @@ def test_cockpit_is_private_case_preserving_and_completion_safe():
 
 def test_cockpit_has_two_step_candidate_selection_and_never_auto_picks_best_score():
     t = cockpit().lower()
-    assert "ningún candidato se preselecciona automáticamente" in t
     assert "ningún código se elige automáticamente" in t
     assert "evaluar este código" in t
     assert "const requested=" in t
@@ -179,6 +178,7 @@ def test_cockpit_has_two_step_candidate_selection_and_never_auto_picks_best_scor
     selection = t[t.index("const requested="):t.index("const selectedcandidate=")]
     assert "best_code" not in selection
     assert "best_score" not in selection
+    assert "source" not in selection
 
 
 def test_cockpit_business_write_authority_is_narrow_and_non_economic():
