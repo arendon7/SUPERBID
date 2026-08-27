@@ -56,10 +56,16 @@ def test_candidate_cockpit_is_exact_before_and_after_mutation():
     assert "external_lot_id=eq.${encodeURIComponent(lot)}" in COCKPIT
     assert "dashboard_save_fasecolda_candidate_resolution" in COCKPIT
     assert "dashboard_clear_fasecolda_candidate_resolution_v52" in COCKPIT
-    assert "?candidate=${encodeURIComponent(code)}&saved=draft" in COCKPIT
+    assert "candidate=${encodeURIComponent(code)}" in COCKPIT
+    assert "&saved=draft" in COCKPIT
+    assert "sourceSuffix" in COCKPIT
     assert "superbid-readiness-dashboard?lot=${encodeURIComponent(lot)}" in COCKPIT
     assert 'name="confirm_resolution" value="YES"' in COCKPIT
-    assert "ningún candidato se preselecciona automáticamente" in COCKPIT.lower()
+    lower = COCKPIT.lower()
+    selection = lower[lower.index("const requested="):lower.index("const selectedcandidate=")]
+    assert "best_code" not in selection
+    assert "best_score" not in selection
+    assert "source" not in selection
 
 
 def test_search_workflow_keeps_exact_lot_through_explore_probe_and_override():

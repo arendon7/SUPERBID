@@ -15,6 +15,7 @@ import {
 const U = Deno.env.get("SUPABASE_URL")!;
 const K = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COOKIE = "sb_fasecolda_candidate_session";
+const HANDOFF_GUARDRAIL = "SOURCE_CONTEXT_VIEWER_ONLY_NOT_EVIDENCE_OR_CANDIDATE_SELECTION";
 
 const DIMS = [
   ["line_identity", "Línea / familia", "Debe corresponder a la línea pública del lote."],
@@ -66,84 +67,40 @@ main{padding:20px 26px 45px;max-width:1900px;margin:auto}.nav,.actions,.filters,
 .hint-grid{display:grid;gap:5px;margin:10px 0}.hint-row{display:grid;grid-template-columns:90px 1fr auto;gap:6px;align-items:center;border-top:1px solid #edf0ec;padding-top:5px}.hint-value{font-size:11px;white-space:normal}
 .disc-map{border:1px solid var(--l);border-radius:11px;padding:13px;background:#f8faf7}.disc-map h3{margin:0 0 6px}.disc-values{display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:5px;margin:10px 0}.disc-kv{border:1px solid #e7ebe6;border-radius:7px;padding:7px;background:#fff}.disc-kv span{display:block;font-size:10px;color:var(--m);text-transform:uppercase}.token{font-size:10px;font-weight:750;border-radius:6px;padding:4px 7px;display:inline-block}.disc-readonly{border-left:4px solid var(--b);padding:10px 12px;background:#f5f8fa;margin-bottom:12px}
 .evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dimension{border:1px solid var(--l);border-radius:10px;padding:12px;background:#fafbf9}.dimension h3{margin:0 0 4px}.dimension select,.dimension textarea,.dimension input,.form textarea,.form input,.form select{width:100%}.dimension input[type=checkbox],.form input[type=checkbox]{width:auto}.dimension textarea{min-height:78px}
-.source-list{display:grid;gap:7px}.source{border:1px solid var(--l);border-radius:8px;padding:9px;background:#fafbf9;overflow-wrap:anywhere}.form textarea{min-height:100px}.two{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;align-items:start}.history{margin-top:14px}.err{color:var(--r);font-weight:700}
-@media(max-width:1200px){.candidate-grid{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){main{padding:13px}.top{align-items:flex-start}.candidate-grid,.evidence-grid,.metrics,.disc-values{grid-template-columns:1fr}.hint-row{grid-template-columns:1fr}}
+.source-list{display:grid;gap:7px}.source{border:1px solid var(--l);border-radius:8px;padding:9px;background:#fafbf9;overflow-wrap:anywhere}.source.context{border:2px solid var(--b);background:#f5f8fa}.viewer{width:100%;height:660px;border:1px solid var(--l);border-radius:9px;background:#fff;margin-bottom:10px}.form textarea{min-height:100px}.two{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;align-items:start}.history{margin-top:14px}.err{color:var(--r);font-weight:700}
+@media(max-width:1200px){.candidate-grid{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){main{padding:13px}.top{align-items:flex-start}.candidate-grid,.evidence-grid,.metrics,.disc-values{grid-template-columns:1fr}.hint-row{grid-template-columns:1fr}.viewer{height:520px}}
 `;
 
 function html(t: string, b: string, s = 200, h: Record<string, string> = {}) {
   return new Response(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(t)}</title><style>${css}</style></head><body>${b}</body></html>`, {
     status: s,
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...h },
+    headers: { "content-type":"text/html; charset=utf-8", "cache-control":"no-store", ...h },
   });
 }
 
 async function db(path: string, init: RequestInit = {}) {
   return fetch(`${U}${path}`, {
     ...init,
-    headers: { apikey: K, authorization: `Bearer ${K}`, "content-type": "application/json", ...(init.headers || {}) },
+    headers: { apikey: K, authorization: `Bearer ${K}`, "content-type":"application/json", ...(init.headers || {}) },
   });
 }
+async function rows(path: string) { const r=await db(path); if(!r.ok) throw new Error(`GET ${r.status}`); return r.json(); }
+async function one(path: string) { const xs=await rows(path); return xs[0]||null; }
+function cookie(req: Request) { for(const p of (req.headers.get("cookie")||"").split(";")){const [k,...v]=p.trim().split("=");if(k===COOKIE)return decodeURIComponent(v.join("="));} return ""; }
+async function valid(t: string) { if(!t||t.length<32||t.length>256)return false;const r=await db("/rest/v1/rpc/dashboard_token_valid",{method:"POST",body:JSON.stringify({p_token:t})});return r.ok&&(await r.json())===true; }
+function pathOf(req: Request){const p=new URL(req.url).pathname,m="/superbid-fasecolda-candidate-cockpit",i=p.indexOf(m);return i>=0?(p.slice(i+m.length)||"/"):p;}
+function safeLot(v:any){const x=String(v||"").trim();return /^\d{5,12}$/.test(x)?x:"";}
+function lotFromPath(p:string){const m=p.match(/^\/lots\/(\d{5,12})(?:\/|$)/);return m?safeLot(m[1]):"";}
+function safeHttpUrl(v:any){try{const u=new URL(String(v||""));return u.protocol==="https:"||u.protocol==="http:"?u.toString():"";}catch{return "";}}
+function redirect(location:string,headers:Record<string,string>={}){return new Response(null,{status:303,headers:{location,"cache-control":"no-store",...headers}});}
 
-async function rows(path: string) {
-  const r = await db(path);
-  if (!r.ok) throw new Error(`GET ${r.status}`);
-  return r.json();
-}
-
-async function one(path: string) {
-  const xs = await rows(path);
-  return xs[0] || null;
-}
-
-function cookie(req: Request) {
-  for (const p of (req.headers.get("cookie") || "").split(";")) {
-    const [k, ...v] = p.trim().split("=");
-    if (k === COOKIE) return decodeURIComponent(v.join("="));
-  }
-  return "";
-}
-
-async function valid(t: string) {
-  if (!t || t.length < 32 || t.length > 256) return false;
-  const r = await db("/rest/v1/rpc/dashboard_token_valid", { method: "POST", body: JSON.stringify({ p_token: t }) });
-  return r.ok && (await r.json()) === true;
-}
-
-function pathOf(req: Request) {
-  const p = new URL(req.url).pathname;
-  const marker = "/superbid-fasecolda-candidate-cockpit";
-  const i = p.indexOf(marker);
-  return i >= 0 ? (p.slice(i + marker.length) || "/") : p;
-}
-
-function safeLot(v: any) {
-  const lot = String(v || "").trim();
-  return /^\d{5,12}$/.test(lot) ? lot : "";
-}
-
-function lotFromPath(p: string) {
-  const m = p.match(/^\/lots\/(\d{5,12})(?:\/|$)/);
-  return m ? safeLot(m[1]) : "";
-}
-
-function safeHttpUrl(v: any) {
-  try {
-    const u = new URL(String(v || ""));
-    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
-function redirect(location: string, headers: Record<string, string> = {}) {
-  return new Response(null, { status: 303, headers: { location, "cache-control": "no-store", ...headers } });
-}
-
-function login(error = false, lot = "") {
+function login(error=false,lot="",source="") {
+  const safeSource=safeHttpUrl(source);
   return html("SUPERBID — Fasecolda Candidate Cockpit", `<form class="login" method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/login">
     ${lot ? `<input type="hidden" name="lot" value="${esc(lot)}">` : ""}
-    <div class="ey">SUPERBID · v0.55</div><h1>Candidate Resolution Cockpit</h1>
-    <p class="sub">Acceso privado. La confirmación exacta exige evidencia humana de identidad; pistas y mapas automáticos solo organizan diferencias de texto y no generan homologación ni señal de compra.</p>
+    ${safeSource ? `<input type="hidden" name="source" value="${esc(safeSource)}">` : ""}
+    <div class="ey">SUPERBID · v0.58</div><h1>Candidate Resolution Cockpit</h1>
+    <p class="sub">Acceso privado. La confirmación exacta exige evidencia humana de identidad; el contexto de fuente, las pistas y mapas automáticos solo ayudan a navegar y no generan homologación ni señal de compra.</p>
     ${lot ? `<p class="sub">Continuar con lote ${esc(lot)} después de autenticar.</p>` : ""}
     ${error ? '<p class="err">Credencial inválida.</p>' : ""}
     <input type="password" name="password" autocomplete="current-password" required placeholder="Clave de acceso"><button class="primary">Entrar</button>
@@ -152,116 +109,39 @@ function login(error = false, lot = "") {
 
 const nav = `<nav class="nav"><a class="btn" href="/functions/v1/superbid-dashboard">Dashboard</a><a class="btn" href="/functions/v1/superbid-readiness-dashboard">Due diligence</a><a class="btn" href="/functions/v1/superbid-fasecolda-workbench">Fasecolda</a><a class="btn" href="/functions/v1/superbid-fasecolda-candidate-cockpit">Candidatos</a><a class="btn" href="/functions/v1/superbid-fasecolda-search-dashboard">Búsqueda</a><a class="btn" href="/functions/v1/superbid-fasecolda-year-dashboard">Año</a><form method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/logout"><button>Salir</button></form></nav>`;
 
-function statusPill(v: any) {
-  const x = String(v || "UNREVIEWED");
-  const c = x === "REVIEWED" ? "reviewed" : x === "DRAFT" ? "draft" : "none";
-  return `<span class="pill ${c}">${esc(x)}</span>`;
+function statusPill(v:any){const x=String(v||"UNREVIEWED"),c=x==="REVIEWED"?"reviewed":x==="DRAFT"?"draft":"none";return `<span class="pill ${c}">${esc(x)}</span>`;}
+function autoPill(v:any){const x=String(v||"—"),c=x==="AMBIGUOUS"?"ambiguous":x==="MEDIUM"?"medium":x==="HIGH"?"match":"none";return `<span class="pill ${c}">${esc(x)}</span>`;}
+function normalizedDescription(v:any){return String(v||"").trim().toUpperCase().replace(/\s+/g," ");}
+function dimVal(d:any,key:string,field:string){const x=d&&typeof d==="object"?d[key]:null;return x&&typeof x==="object"?String(x[field]??""):"";}
+function dimBool(d:any,key:string,field:string){const x=d&&typeof d==="object"?d[key]:null;return !!(x&&typeof x==="object"&&x[field]===true);}
+function statusOptions(cur:string){return STATUSES.map((x)=>`<option value="${esc(x)}" ${x===cur?"selected":""}>${esc(x||"Seleccionar")}</option>`).join("");}
+function sourceOptions(sources:{url:string;label:string}[],cur:string){return [`<option value="">Seleccionar fuente</option>`,...sources.map((s)=>`<option value="${esc(s.url)}" ${s.url===cur?"selected":""}>${esc(s.label)}</option>`)].join("");}
+function hintValue(v:any){return v==null?"—":String(v);}
+function hintStatus(c:HintComparison){if(c.status==="CONSISTENT")return ["COINCIDE","hint-consistent"];if(c.status==="NOMINAL_COMPATIBLE")return ["COMPATIBLE ±50 CC","hint-compatible"];if(c.status==="DIFFERS")return ["DIFIERE","hint-differs"];if(c.status==="LOT_UNKNOWN")return ["SIN PISTA LOTE","hint-unknown"];return ["SIN PISTA CANDIDATO","hint-unknown"];}
+function hintRows(lotTitle:any,candidateDescription:any){const cmp=compareVehicleIdentityHints(lotTitle,candidateDescription);return Object.entries(cmp).map(([key,value])=>{const c=value as HintComparison;const [label,cls]=hintStatus(c);return `<div class="hint-row"><strong>${esc(HINT_LABELS[key]||key)}</strong><span class="hint-value">lote ${esc(hintValue(c.lot))} · candidato ${esc(hintValue(c.candidate))}</span><span class="pill ${cls}">${esc(label)}</span></div>`;}).join("");}
+function hintSummary(title:any){const h=extractVehicleIdentityHints(title);return `<div class="hint-summary"><span class="pill none">CC ${esc(h.engineCc??"—")}</span><span class="pill none">Caja ${esc(h.transmission??"—")}</span><span class="pill none">Tracción ${esc(h.drivetrain??"—")}</span><span class="pill none">Combustible ${esc(h.fuel??"—")}</span></div>`;}
+function structuredValue(entry:CandidateDiscriminatorEntry,key:StructuredDiscriminatorKey){const value=entry.structuredValues[key];return value==null?"—":String(value);}
+function discriminatorSummary(map:ReturnType<typeof buildCandidateDiscriminatorMap>){const dimensions=map.structuredDiscriminators.length?map.structuredDiscriminators.map((key)=>`<span class="pill disc-active">${esc(DISCRIMINATOR_LABELS[key])}</span>`).join(""):'<span class="pill none">SIN DIFERENCIA ESTRUCTURADA DETECTABLE</span>';const duplicate=map.hasIndistinguishableDescriptions?`<span class="pill blocked">${esc(map.duplicateDescriptionGroupCount)} GRUPO(S) DE DESCRIPCIÓN INDISTINGUIBLE · ${esc(map.candidatesInDuplicateDescriptionGroups)} CÓDIGOS</span>`:'<span class="pill reviewed">SIN DESCRIPCIONES DUPLICADAS</span>';return `<div class="disc-summary">${dimensions}${duplicate}</div>`;}
+function discriminatorReadOnly(entry:CandidateDiscriminatorEntry|undefined,map:ReturnType<typeof buildCandidateDiscriminatorMap>){if(!entry)return "";const dimensions=map.structuredDiscriminators.map((key)=>`${DISCRIMINATOR_LABELS[key]}=${structuredValue(entry,key)}`).join(" · ")||"sin dimensión estructurada diferencial";const tokens=entry.literalDeltaTokens.join(", ")||"sin delta literal detectado";return `<div class="disc-readonly"><strong>${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)}.</strong><div class="sub">Orientación read-only para ${esc(entry.code)}: ${esc(dimensions)}. Deltas literales: ${esc(tokens)}. Esta información no está dentro del formulario, no prellena evidencia y no prueba que el candidato sea correcto.</div></div>`;}
+
+async function board(req:Request){
+  const u=new URL(req.url),status=(u.searchParams.get("status")||"ALL").toUpperCase(),statuses=new Set(["UNREVIEWED","DRAFT","REVIEWED","ALL"]),ss=statuses.has(status)?status:"ALL";
+  const sel="external_lot_id,title,brand,line,model_year,city,seller,current_bid_cop,closes_at,automatic_status,automatic_best_code,automatic_best_score,automatic_second_score,candidate_count,workflow_target,triage_rank,triage_reason,readiness_status,readiness_next_action,hours_to_close,evidence_status,evidence_chosen_code,evidence_complete_count,evidence_match_count,evidence_conflict_count,evidence_not_stated_count,evidence_discriminating_match_count,evidence_updated_at,evidence_route_origin,evidence_interpretation";
+  let q=`/rest/v1/dashboard_fasecolda_candidate_resolution_queue_v58?select=${encodeURIComponent(sel)}&workflow_target=eq.CANDIDATE_RESOLUTION&order=triage_rank.asc,hours_to_close.asc&limit=500`;
+  if(ss!=="ALL")q+=`&evidence_status=eq.${encodeURIComponent(ss)}`;
+  const xs=await rows(q);
+  const cards=[["Casos",xs.length],["Sin evidencia",xs.filter((x:any)=>x.evidence_status==="UNREVIEWED").length],["Draft",xs.filter((x:any)=>x.evidence_status==="DRAFT").length],["Reviewed",xs.filter((x:any)=>x.evidence_status==="REVIEWED").length],["Ambiguous",xs.filter((x:any)=>x.automatic_status==="AMBIGUOUS").length],["Medium",xs.filter((x:any)=>x.automatic_status==="MEDIUM").length]].map((x)=>`<div class="metric"><span>${esc(x[0])}</span><strong>${esc(x[1])}</strong></div>`).join("");
+  const filters=`<form class="filters" method="get"><select name="status"><option value="ALL" ${ss==="ALL"?"selected":""}>Todas las evidencias</option><option value="UNREVIEWED" ${ss==="UNREVIEWED"?"selected":""}>UNREVIEWED</option><option value="DRAFT" ${ss==="DRAFT"?"selected":""}>DRAFT</option><option value="REVIEWED" ${ss==="REVIEWED"?"selected":""}>REVIEWED</option></select><button class="primary">Aplicar</button></form>`;
+  const tableRows=xs.map((x:any)=>`<tr><td>${esc(x.triage_rank??"—")}<div class="sub">${esc(x.triage_reason||"—")}</div><div class="sub">origen ${esc(x.evidence_route_origin||"—")}</div></td><td class="vehicle"><strong>${esc(x.title)}</strong><div class="sub">Lote ${esc(x.external_lot_id)} · ${esc([x.city,x.seller].filter(Boolean).join(" · "))}</div></td><td>${autoPill(x.automatic_status)}<div class="sub">best ${esc(x.automatic_best_code||"—")} · score ${esc(x.automatic_best_score??"—")}</div></td><td>${esc(x.candidate_count??0)}</td><td>${statusPill(x.evidence_status)}<div class="sub">${esc(x.evidence_complete_count??0)}/6 completas · ${esc(x.evidence_discriminating_match_count??0)} discriminador(es) explícitos</div></td><td>${dt(x.closes_at)}<div class="sub">${esc(x.hours_to_close??"—")} h</div></td><td><a class="btn primary" href="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(x.external_lot_id)}">Resolver con evidencia</a></td></tr>`).join("");
+  return html("SUPERBID — Candidate Resolution",`<header class="top"><div><div class="ey">SUPERBID · v0.58</div><h1>Fasecolda Candidate Resolution Cockpit</h1></div>${nav}</header><main><div class="notice"><strong>MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL.</strong> La cola fast solo refleja routing EVIDENCE_REVIEW. El score fuzzy, el origen de ruta y cualquier fuente en contexto no deciden versión exacta. Confirmar exige el gate v0.52 completo y ninguna fila del board constituye evidencia.</div><div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)} · ${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)}.</strong> Pistas y mapas automáticos son read-only: no se guardan como evidencia, no prellenan el formulario humano y no crean ranking, homologación ni recomendación.</div><section class="metrics">${cards}</section><section class="panel"><div class="head"><div><h2>Cola candidate-resolution</h2><span class="sub">Fast path v0.58: routing live + estado de evidencia. El detalle exact-lot y toda escritura permanecen en el contrato v0.52.</span></div>${filters}</div><div class="tablewrap"><table><thead><tr><th>Prioridad</th><th>Vehículo</th><th>Automático</th><th>Candidatos</th><th>Evidencia</th><th>Cierre</th><th>Acción</th></tr></thead><tbody>${tableRows||'<tr><td colspan="7">Sin casos para este filtro.</td></tr>'}</tbody></table></div></section></main>`);
 }
 
-function autoPill(v: any) {
-  const x = String(v || "—");
-  const c = x === "AMBIGUOUS" ? "ambiguous" : x === "MEDIUM" ? "medium" : x === "HIGH" ? "match" : "none";
-  return `<span class="pill ${c}">${esc(x)}</span>`;
-}
-
-function normalizedDescription(v: any) {
-  return String(v || "").trim().toUpperCase().replace(/\s+/g, " ");
-}
-
-function dimVal(d: any, key: string, field: string) {
-  const x = d && typeof d === "object" ? d[key] : null;
-  return x && typeof x === "object" ? String(x[field] ?? "") : "";
-}
-
-function dimBool(d: any, key: string, field: string) {
-  const x = d && typeof d === "object" ? d[key] : null;
-  return !!(x && typeof x === "object" && x[field] === true);
-}
-
-function statusOptions(cur: string) {
-  return STATUSES.map((x) => `<option value="${esc(x)}" ${x === cur ? "selected" : ""}>${esc(x || "Seleccionar")}</option>`).join("");
-}
-
-function sourceOptions(sources: { url: string; label: string }[], cur: string) {
-  return [`<option value="">Seleccionar fuente</option>`, ...sources.map((s) => `<option value="${esc(s.url)}" ${s.url === cur ? "selected" : ""}>${esc(s.label)}</option>`)].join("");
-}
-
-function hintValue(v: any) {
-  return v == null ? "—" : String(v);
-}
-
-function hintStatus(c: HintComparison) {
-  if (c.status === "CONSISTENT") return ["COINCIDE", "hint-consistent"];
-  if (c.status === "NOMINAL_COMPATIBLE") return ["COMPATIBLE ±50 CC", "hint-compatible"];
-  if (c.status === "DIFFERS") return ["DIFIERE", "hint-differs"];
-  if (c.status === "LOT_UNKNOWN") return ["SIN PISTA LOTE", "hint-unknown"];
-  return ["SIN PISTA CANDIDATO", "hint-unknown"];
-}
-
-function hintRows(lotTitle: any, candidateDescription: any) {
-  const cmp = compareVehicleIdentityHints(lotTitle, candidateDescription);
-  return Object.entries(cmp).map(([key, value]) => {
-    const c = value as HintComparison;
-    const [label, cls] = hintStatus(c);
-    return `<div class="hint-row"><strong>${esc(HINT_LABELS[key] || key)}</strong><span class="hint-value">lote ${esc(hintValue(c.lot))} · candidato ${esc(hintValue(c.candidate))}</span><span class="pill ${cls}">${esc(label)}</span></div>`;
-  }).join("");
-}
-
-function hintSummary(title: any) {
-  const h = extractVehicleIdentityHints(title);
-  return `<div class="hint-summary"><span class="pill none">CC ${esc(h.engineCc ?? "—")}</span><span class="pill none">Caja ${esc(h.transmission ?? "—")}</span><span class="pill none">Tracción ${esc(h.drivetrain ?? "—")}</span><span class="pill none">Combustible ${esc(h.fuel ?? "—")}</span></div>`;
-}
-
-function structuredValue(entry: CandidateDiscriminatorEntry, key: StructuredDiscriminatorKey) {
-  const value = entry.structuredValues[key];
-  return value == null ? "—" : String(value);
-}
-
-function discriminatorSummary(map: ReturnType<typeof buildCandidateDiscriminatorMap>) {
-  const dimensions = map.structuredDiscriminators.length
-    ? map.structuredDiscriminators.map((key) => `<span class="pill disc-active">${esc(DISCRIMINATOR_LABELS[key])}</span>`).join("")
-    : '<span class="pill none">SIN DIFERENCIA ESTRUCTURADA DETECTABLE</span>';
-  const duplicate = map.hasIndistinguishableDescriptions
-    ? `<span class="pill blocked">${esc(map.duplicateDescriptionGroupCount)} GRUPO(S) DE DESCRIPCIÓN INDISTINGUIBLE · ${esc(map.candidatesInDuplicateDescriptionGroups)} CÓDIGOS</span>`
-    : '<span class="pill reviewed">SIN DESCRIPCIONES DUPLICADAS</span>';
-  return `<div class="disc-summary">${dimensions}${duplicate}</div>`;
-}
-
-function discriminatorReadOnly(entry: CandidateDiscriminatorEntry | undefined, map: ReturnType<typeof buildCandidateDiscriminatorMap>) {
-  if (!entry) return "";
-  const dimensions = map.structuredDiscriminators.map((key) => `${DISCRIMINATOR_LABELS[key]}=${structuredValue(entry, key)}`).join(" · ") || "sin dimensión estructurada diferencial";
-  const tokens = entry.literalDeltaTokens.join(", ") || "sin delta literal detectado";
-  return `<div class="disc-readonly"><strong>${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)}.</strong><div class="sub">Orientación read-only para ${esc(entry.code)}: ${esc(dimensions)}. Deltas literales: ${esc(tokens)}. Esta información no está dentro del formulario, no prellena evidencia y no prueba que el candidato sea correcto.</div></div>`;
-}
-
-async function board(req: Request) {
-  const u = new URL(req.url);
-  const status = (u.searchParams.get("status") || "ALL").toUpperCase();
-  const statuses = new Set(["UNREVIEWED", "DRAFT", "REVIEWED", "ALL"]);
-  const ss = statuses.has(status) ? status : "ALL";
-  const sel = "external_lot_id,title,brand,line,model_year,city,seller,current_bid_cop,closes_at,review_state,automatic_status,automatic_best_code,automatic_best_score,automatic_second_score,candidate_count,manual_resolution_status,workflow_target,triage_rank,triage_reason,readiness_status,readiness_next_action,hours_to_close,evidence_status,evidence_chosen_code,evidence_complete_count,evidence_match_count,evidence_conflict_count,evidence_not_stated_count,evidence_discriminating_match_count,evidence_updated_at,evidence_interpretation";
-  let q = `/rest/v1/dashboard_fasecolda_candidate_resolution_cockpit_v52?select=${encodeURIComponent(sel)}&workflow_target=eq.CANDIDATE_RESOLUTION&order=triage_rank.asc,hours_to_close.asc&limit=500`;
-  if (ss !== "ALL") q += `&evidence_status=eq.${encodeURIComponent(ss)}`;
-  const xs = await rows(q);
-  const cards = [
-    ["Casos", xs.length],
-    ["Sin evidencia", xs.filter((x: any) => x.evidence_status === "UNREVIEWED").length],
-    ["Draft", xs.filter((x: any) => x.evidence_status === "DRAFT").length],
-    ["Reviewed", xs.filter((x: any) => x.evidence_status === "REVIEWED").length],
-    ["Ambiguous", xs.filter((x: any) => x.automatic_status === "AMBIGUOUS").length],
-    ["Medium", xs.filter((x: any) => x.automatic_status === "MEDIUM").length],
-  ].map((x) => `<div class="metric"><span>${esc(x[0])}</span><strong>${esc(x[1])}</strong></div>`).join("");
-  const filters = `<form class="filters" method="get"><select name="status"><option value="ALL" ${ss === "ALL" ? "selected" : ""}>Todas las evidencias</option><option value="UNREVIEWED" ${ss === "UNREVIEWED" ? "selected" : ""}>UNREVIEWED</option><option value="DRAFT" ${ss === "DRAFT" ? "selected" : ""}>DRAFT</option><option value="REVIEWED" ${ss === "REVIEWED" ? "selected" : ""}>REVIEWED</option></select><button class="primary">Aplicar</button></form>`;
-  const tableRows = xs.map((x: any) => `<tr><td>${esc(x.triage_rank ?? "—")}<div class="sub">${esc(x.triage_reason || "—")}</div></td><td class="vehicle"><strong>${esc(x.title)}</strong><div class="sub">Lote ${esc(x.external_lot_id)} · ${esc([x.city, x.seller].filter(Boolean).join(" · "))}</div></td><td>${autoPill(x.automatic_status)}<div class="sub">best ${esc(x.automatic_best_code || "—")} · score ${esc(x.automatic_best_score ?? "—")}</div></td><td>${esc(x.candidate_count ?? 0)}</td><td>${statusPill(x.evidence_status)}<div class="sub">${esc(x.evidence_complete_count ?? 0)}/6 completas · ${esc(x.evidence_discriminating_match_count ?? 0)} discriminador(es) explícitos</div></td><td>${dt(x.closes_at)}<div class="sub">${esc(x.hours_to_close ?? "—")} h</div></td><td><a class="btn primary" href="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(x.external_lot_id)}">Resolver con evidencia</a></td></tr>`).join("");
-  return html("SUPERBID — Candidate Resolution", `<header class="top"><div><div class="ey">SUPERBID · v0.55</div><h1>Fasecolda Candidate Resolution Cockpit</h1></div>${nav}</header><main><div class="notice"><strong>MANUAL_FASECOLDA_CANDIDATE_EVIDENCE_NOT_AUTOMATIC_MATCH_OR_BUY_SIGNAL.</strong> El score fuzzy organiza candidatos, pero no decide versión exacta. Confirmar exige seis dimensiones humanas, cero conflictos y al menos un MATCH no-lineal marcado explícitamente como discriminador frente a las alternativas actuales. Ningún candidato se preselecciona automáticamente.</div><div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)} · ${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)}.</strong> Pistas y mapas automáticos son read-only: no se guardan como evidencia, no prellenan el formulario humano y no crean ranking, homologación ni recomendación.</div><section class="metrics">${cards}</section><section class="panel"><div class="head"><div><h2>Cola candidate-resolution</h2><span class="sub">Solo casos cuyo workflow canónico actual es CANDIDATE_RESOLUTION. El mapa de diferencias se calcula únicamente al abrir un lote.</span></div>${filters}</div><div class="tablewrap"><table><thead><tr><th>Prioridad</th><th>Vehículo</th><th>Automático</th><th>Candidatos</th><th>Evidencia</th><th>Cierre</th><th>Acción</th></tr></thead><tbody>${tableRows || '<tr><td colspan="7">Sin casos para este filtro.</td></tr>'}</tbody></table></div></section></main>`);
-}
-
-async function detail(req: Request, lot: string) {
-  const u = new URL(req.url);
-  const lotRow = await one(`/rest/v1/auction_lots?select=${encodeURIComponent("id,external_lot_id,title,brand,line,model_year,city,seller,current_bid_cop,closes_at,url")}&external_lot_id=eq.${encodeURIComponent(lot)}&order=id.desc&limit=1`);
-  if (!lotRow) return html("No encontrado", `<main><div class="notice bad">Lote ${esc(lot)} no encontrado.</div><a class="btn" href="/functions/v1/superbid-fasecolda-candidate-cockpit">Volver</a></main>`, 404);
-  const id = lotRow.id;
-  const [auto, candidates, manual, evidence, attachments, history] = await Promise.all([
+async function detail(req:Request,lot:string){
+  const u=new URL(req.url);
+  const lotRow=await one(`/rest/v1/auction_lots?select=${encodeURIComponent("id,external_lot_id,title,brand,line,model_year,city,seller,current_bid_cop,closes_at,url")}&external_lot_id=eq.${encodeURIComponent(lot)}&order=id.desc&limit=1`);
+  if(!lotRow)return html("No encontrado",`<main><div class="notice bad">Lote ${esc(lot)} no encontrado.</div><a class="btn" href="/functions/v1/superbid-fasecolda-candidate-cockpit">Volver</a></main>`,404);
+  const id=lotRow.id;
+  const [auto,candidates,manual,evidence,attachments,history]=await Promise.all([
     one(`/rest/v1/lot_fasecolda_matches?select=${encodeURIComponent("lot_id,status,search_term,best_code,best_description,best_score,second_score,candidate_count,current_value_cop,matched_at,note")}&lot_id=eq.${encodeURIComponent(id)}&limit=1`),
     rows(`/rest/v1/lot_fasecolda_candidates?select=${encodeURIComponent("code,model_year,description,score,rank_no,current_value_cop,evaluated_at")}&lot_id=eq.${encodeURIComponent(id)}&order=rank_no.asc`),
     one(`/rest/v1/lot_fasecolda_manual_resolutions?select=${encodeURIComponent("external_lot_id,chosen_code,chosen_description,chosen_value_cop,candidate_score,candidate_rank,note,resolved_at,updated_at")}&lot_id=eq.${encodeURIComponent(id)}&limit=1`),
@@ -270,127 +150,82 @@ async function detail(req: Request, lot: string) {
     rows(`/rest/v1/lot_fasecolda_candidate_resolution_evidence_history?select=${encodeURIComponent("action,chosen_code,chosen_description,evidence_complete_count,match_count,conflict_count,not_stated_count,discriminating_match_count,summary_note,created_at")}&lot_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=25`),
   ]);
 
-  const candidateCodes = new Set((candidates || []).map((x: any) => String(x.code)));
+  const candidateCodes=new Set((candidates||[]).map((x:any)=>String(x.code)));
   const requested=String(u.searchParams.get("candidate")||"").trim(),persisted=evidence?String(evidence.chosen_code||""):"",selected=candidateCodes.has(requested)?requested:(!requested&&candidateCodes.has(persisted)?persisted:"");
   const selectedCandidate=(candidates||[]).find((x:any)=>String(x.code)===selected)||null;
-  const sameEvidence = !!(selected && evidence && String(evidence.chosen_code) === selected);
-  const dims = sameEvidence ? (evidence.dimensions || {}) : {};
+  const sameEvidence=!!(selected&&evidence&&String(evidence.chosen_code)===selected);
+  const dims=sameEvidence?(evidence.dimensions||{}):{};
 
-  const sources: { url: string; label: string }[] = [];
-  const seen = new Set<string>();
-  const addSource = (raw: any, label: string) => {
-    const url = safeHttpUrl(raw);
-    if (url && !seen.has(url)) { seen.add(url); sources.push({ url, label }); }
-  };
-  addSource(lotRow.url, "Página pública del lote");
-  for (const a of attachments || []) addSource(a.url, `${a.kind || "ANEXO"} · ${a.name || `archivo ${a.id}`}`);
+  const sources:{url:string;label:string}[]=[];
+  const seen=new Set<string>();
+  const addSource=(raw:any,label:string)=>{const url=safeHttpUrl(raw);if(url&&!seen.has(url)){seen.add(url);sources.push({url,label});}};
+  addSource(lotRow.url,"Página pública del lote");
+  for(const a of attachments||[])addSource(a.url,`${a.kind||"ANEXO"} · ${a.name||`archivo ${a.id}`}`);
+  const requestedSource=safeHttpUrl(u.searchParams.get("source"));
+  const selectedSource=requestedSource&&seen.has(requestedSource)?requestedSource:"";
+  const sourceContextQuery=selectedSource?`&source=${encodeURIComponent(selectedSource)}`:"";
 
-  const descCounts = new Map<string, number>();
-  for (const c of candidates || []) {
-    const k = normalizedDescription(c.description);
-    descCounts.set(k, (descCounts.get(k) || 0) + 1);
-  }
+  const descCounts=new Map<string,number>();for(const c of candidates||[]){const k=normalizedDescription(c.description);descCounts.set(k,(descCounts.get(k)||0)+1);}
+  const discriminatorMap=buildCandidateDiscriminatorMap((candidates||[]).map((c:any)=>({code:String(c.code),description:String(c.description||"")})));
+  const discriminatorByCode=new Map(discriminatorMap.entries.map((entry)=>[entry.code,entry]));
+  const selectedDiscriminator=selected?discriminatorByCode.get(selected):undefined;
+  const discriminatorPanel=`<section class="panel" style="margin-top:14px"><div class="head"><div><h2>Mapa de diferencias actuales</h2><span class="sub">Compara únicamente el set de candidatos ya cargado. Una dimensión solo aparece si existen al menos dos valores conocidos distintos; un dato ausente no se trata como diferencia.</span></div></div><div class="section disc-map"><h3>Qué puede separar versiones en este set</h3>${discriminatorSummary(discriminatorMap)}<p class="sub">Los chips de texto por candidato son tokens literales no compartidos por todo el conjunto. Pueden reflejar trim, uso, carrocería o equipamiento, pero no tienen interpretación semántica automática.</p></div></section>`;
 
-  const discriminatorMap = buildCandidateDiscriminatorMap((candidates || []).map((c: any) => ({ code: String(c.code), description: String(c.description || "") })));
-  const discriminatorByCode = new Map(discriminatorMap.entries.map((entry) => [entry.code, entry]));
-  const selectedDiscriminator = selected ? discriminatorByCode.get(selected) : undefined;
-  const discriminatorPanel = `<section class="panel" style="margin-top:14px"><div class="head"><div><h2>Mapa de diferencias actuales</h2><span class="sub">Compara únicamente el set de candidatos ya cargado. Una dimensión solo aparece si existen al menos dos valores conocidos distintos; un dato ausente no se trata como diferencia.</span></div></div><div class="section disc-map"><h3>Qué puede separar versiones en este set</h3>${discriminatorSummary(discriminatorMap)}<p class="sub">Los chips de texto por candidato son tokens literales no compartidos por todo el conjunto. Pueden reflejar trim, uso, carrocería o equipamiento, pero no tienen interpretación semántica automática.</p></div></section>`;
+  const candidateCards=(candidates||[]).map((c:any)=>{const entry=discriminatorByCode.get(String(c.code));const dup=entry?entry.indistinguishableByDescription:(descCounts.get(normalizedDescription(c.description))||0)>1;const isSel=String(c.code)===selected;const hints=hintRows(lotRow.title,c.description);const structured=entry&&discriminatorMap.structuredDiscriminators.length?`<div class="disc-values">${discriminatorMap.structuredDiscriminators.map((key)=>`<div class="disc-kv"><span>${esc(DISCRIMINATOR_LABELS[key])}</span><strong>${esc(structuredValue(entry,key))}</strong></div>`).join("")}</div>`:'<div class="sub">Sin dimensión estructurada diferencial detectable en este set.</div>';const tokens=entry?.literalDeltaTokens?.length?`<div class="token-list">${entry.literalDeltaTokens.map((token)=>`<span class="token">${esc(token)}</span>`).join("")}</div>`:'<div class="sub">Sin delta literal detectable.</div>';return `<article class="candidate-card ${isSel?"selected":""}"><div class="sub">Rank ${esc(c.rank_no)} · score ${esc(c.score??"—")} · año ${esc(c.model_year??"—")}</div><h3>${esc(c.code)}</h3><p>${esc(c.description)}</p><strong>${cop(c.current_value_cop)}</strong><div class="hint-grid">${hints}</div><div class="disc-map"><div class="sub">Valores en dimensiones que sí varían entre candidatos</div>${structured}<div class="sub" style="margin-top:8px">Deltas literales frente al conjunto</div>${tokens}</div>${dup?`<p><span class="pill blocked">DESCRIPCIÓN INDISTINGUIBLE EN GRUPO DE ${esc(entry?.duplicateDescriptionGroupSize||2)}: confirmación exacta bloqueada por el gate v0.52</span></p>`:""}<a class="btn ${isSel?"":"primary"}" href="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}?candidate=${encodeURIComponent(String(c.code))}${sourceContextQuery}">${isSel?"Candidato en evaluación":"Evaluar este código"}</a></article>`;}).join("");
 
-  const candidateCards = (candidates || []).map((c: any) => {
-    const entry = discriminatorByCode.get(String(c.code));
-    const dup = entry ? entry.indistinguishableByDescription : (descCounts.get(normalizedDescription(c.description)) || 0) > 1;
-    const isSel = String(c.code) === selected;
-    const hints = hintRows(lotRow.title, c.description);
-    const structured = entry && discriminatorMap.structuredDiscriminators.length
-      ? `<div class="disc-values">${discriminatorMap.structuredDiscriminators.map((key) => `<div class="disc-kv"><span>${esc(DISCRIMINATOR_LABELS[key])}</span><strong>${esc(structuredValue(entry, key))}</strong></div>`).join("")}</div>`
-      : '<div class="sub">Sin dimensión estructurada diferencial detectable en este set.</div>';
-    const tokens = entry?.literalDeltaTokens?.length
-      ? `<div class="token-list">${entry.literalDeltaTokens.map((token) => `<span class="token">${esc(token)}</span>`).join("")}</div>`
-      : '<div class="sub">Sin delta literal detectable.</div>';
-    return `<article class="candidate-card ${isSel ? "selected" : ""}"><div class="sub">Rank ${esc(c.rank_no)} · score ${esc(c.score ?? "—")} · año ${esc(c.model_year ?? "—")}</div><h3>${esc(c.code)}</h3><p>${esc(c.description)}</p><strong>${cop(c.current_value_cop)}</strong><div class="hint-grid">${hints}</div><div class="disc-map"><div class="sub">Valores en dimensiones que sí varían entre candidatos</div>${structured}<div class="sub" style="margin-top:8px">Deltas literales frente al conjunto</div>${tokens}</div>${dup ? `<p><span class="pill blocked">DESCRIPCIÓN INDISTINGUIBLE EN GRUPO DE ${esc(entry?.duplicateDescriptionGroupSize || 2)}: confirmación exacta bloqueada por el gate v0.52</span></p>` : ""}<a class="btn ${isSel ? "" : "primary"}" href="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}?candidate=${encodeURIComponent(String(c.code))}">${isSel ? "Candidato en evaluación" : "Evaluar este código"}</a></article>`;
-  }).join("");
+  const sourceList=sources.map((s)=>{const here=`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}?source=${encodeURIComponent(s.url)}${selected?`&candidate=${encodeURIComponent(selected)}`:""}`;return `<div class="source ${s.url===selectedSource?"context":""}"><strong>${esc(s.label)}</strong><div class="sub">${esc(s.url)}</div><div class="actions"><a class="btn" href="${here}">Ver aquí</a><a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(s.url)}">Abrir aparte</a></div></div>`;}).join("")||'<p class="sub">No hay URL pública registrada.</p>';
+  const sourceViewer=selectedSource?(/\.pdf(?:$|\?)/i.test(selectedSource)?`<iframe class="viewer" src="${esc(selectedSource)}" title="Fuente en contexto"></iframe>`:`<div class="notice"><strong>Fuente en contexto para inspección humana.</strong><div class="sub">${esc(selectedSource)}</div><a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(selectedSource)}">Abrir fuente</a></div>`):'<div class="notice">Sin fuente en contexto. Puede escoger una fuente permitida abajo; hacerlo solo cambia el viewer.</div>';
 
-  const sourceList = sources.map((s) => `<div class="source"><strong>${esc(s.label)}</strong><div class="sub">${esc(s.url)}</div><a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(s.url)}">Abrir fuente</a></div>`).join("") || '<p class="sub">No hay URL pública registrada.</p>';
+  const dimCards=selectedCandidate?DIMS.map(([key,label,help])=>{const st=dimVal(dims,key,"status"),ob=dimVal(dims,key,"observed_value"),src=dimVal(dims,key,"source_url"),note=dimVal(dims,key,"evidence_note"),disc=dimBool(dims,key,"discriminating");const discControl=key==="line_identity"?"":`<label><input type="checkbox" name="${esc(key)}__discriminating" value="YES" ${disc?"checked":""}> Este MATCH distingue al candidato frente a por lo menos una alternativa actual. Si se marca, el fundamento debe explicar la diferencia (mín. 20 caracteres).</label>`;return `<section class="dimension"><h3>${esc(label)}</h3><p class="sub">${esc(help)}</p><label><span>Resultado humano</span><select name="${esc(key)}__status">${statusOptions(st)}</select></label><label><span>Valor observado en la fuente</span><input name="${esc(key)}__observed_value" maxlength="500" value="${esc(ob)}" placeholder="Ej. 995 cc, MT, cargo, 4x4"></label><label><span>Fuente</span><select name="${esc(key)}__source_url">${sourceOptions(sources,src)}</select></label><label><span>Fundamento (mín. 10 caracteres para REVIEWED)</span><textarea name="${esc(key)}__evidence_note" maxlength="1000" placeholder="Qué dice o no dice la fuente y por qué soporta este estado.">${esc(note)}</textarea></label>${discControl}</section>`;}).join(""):"";
 
-  const dimCards = selectedCandidate ? DIMS.map(([key, label, help]) => {
-    const st = dimVal(dims, key, "status");
-    const ob = dimVal(dims, key, "observed_value");
-    const src = dimVal(dims, key, "source_url");
-    const note = dimVal(dims, key, "evidence_note");
-    const disc = dimBool(dims, key, "discriminating");
-    const discControl = key === "line_identity" ? "" : `<label><input type="checkbox" name="${esc(key)}__discriminating" value="YES" ${disc ? "checked" : ""}> Este MATCH distingue al candidato frente a por lo menos una alternativa actual. Si se marca, el fundamento debe explicar la diferencia (mín. 20 caracteres).</label>`;
-    return `<section class="dimension"><h3>${esc(label)}</h3><p class="sub">${esc(help)}</p><label><span>Resultado humano</span><select name="${esc(key)}__status">${statusOptions(st)}</select></label><label><span>Valor observado en la fuente</span><input name="${esc(key)}__observed_value" maxlength="500" value="${esc(ob)}" placeholder="Ej. 995 cc, MT, cargo, 4x4"></label><label><span>Fuente</span><select name="${esc(key)}__source_url">${sourceOptions(sources, src)}</select></label><label><span>Fundamento (mín. 10 caracteres para REVIEWED)</span><textarea name="${esc(key)}__evidence_note" maxlength="1000" placeholder="Qué dice o no dice la fuente y por qué soporta este estado.">${esc(note)}</textarea></label>${discControl}</section>`;
-  }).join("") : "";
+  const form=selectedCandidate?(manual?`<div class="notice ok"><strong>Resolución manual vigente:</strong> ${esc(manual.chosen_code)} · ${esc(manual.chosen_description)} · ${cop(manual.chosen_value_cop)}. Para cambiar de código debe hacer CLEAR explícito primero.</div><form class="form" method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}/clear">${selectedSource?`<input type="hidden" name="source_context" value="${esc(selectedSource)}">`:""}<label><span>Fundamento para reabrir (mín. 10 caracteres)</span><textarea name="note" minlength="10" maxlength="2000" required placeholder="Explique por qué se elimina la homologación manual vigente."></textarea></label><label><input type="checkbox" name="confirm_clear" value="YES" required> Confirmo que quiero retirar la resolución manual y volver al estado automático.</label><button class="danger">CLEAR resolución manual</button></form>`:`<form class="form" method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}/save"><input type="hidden" name="code" value="${esc(selected)}">${selectedSource?`<input type="hidden" name="source_context" value="${esc(selectedSource)}">`:""}<div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)} · ${esc(HANDOFF_GUARDRAIL)}.</strong> Las pistas, el mapa y la fuente visible son orientación. Ningún candidato, MATCH, valor observado ni fuente de dimensión se prellena desde el handoff. Cada resultado, valor, fuente y fundamento debe ser decidido explícitamente por la persona revisora.</div><div class="evidence-grid">${dimCards}</div><label><span>Resumen de identidad (mín. 20 caracteres para REVIEWED)</span><textarea name="summary_note" maxlength="2000" placeholder="Por qué las fuentes permiten identificar este código exacto y qué incertidumbre permanece.">${esc(sameEvidence?evidence.summary_note||"":"")}</textarea></label><div class="notice"><strong>Regla de confirmación:</strong> 6/6 dimensiones completas, línea=MATCH, cero CONFLICT y al menos un MATCH no-lineal marcado explícitamente como discriminador. NOT_STATED conserva incertidumbre; nunca debe convertirse en una suposición.</div><div class="actions"><button name="action" value="DRAFT">Guardar DRAFT</button><label><input type="checkbox" name="confirm_resolution" value="YES"> Confirmo manualmente que la evidencia sustenta este código exacto.</label><button class="primary" name="action" value="REVIEWED">Confirmar REVIEWED + resolución manual</button></div></form>`):`<div class="notice"><strong>${esc(HANDOFF_GUARDRAIL)}.</strong> Seleccione primero un candidato de la comparación. La fuente en contexto puede permanecer visible, pero ningún código se elige automáticamente por score, rank, pista, mapa o documento abierto.</div>`;
 
-  const form = selectedCandidate ? (manual
-    ? `<div class="notice ok"><strong>Resolución manual vigente:</strong> ${esc(manual.chosen_code)} · ${esc(manual.chosen_description)} · ${cop(manual.chosen_value_cop)}. Para cambiar de código debe hacer CLEAR explícito primero.</div><form class="form" method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}/clear"><label><span>Fundamento para reabrir (mín. 10 caracteres)</span><textarea name="note" minlength="10" maxlength="2000" required placeholder="Explique por qué se elimina la homologación manual vigente."></textarea></label><label><input type="checkbox" name="confirm_clear" value="YES" required> Confirmo que quiero retirar la resolución manual y volver al estado automático.</label><button class="danger">CLEAR resolución manual</button></form>`
-    : `<form class="form" method="post" action="/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${esc(lot)}/save"><input type="hidden" name="code" value="${esc(selected)}"><div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)}.</strong> Las pistas y el mapa que ve arriba son orientación visual. No se copian a estos campos. Cada resultado, valor, fuente y fundamento debe ser decidido explícitamente por la persona revisora. En cilindraje, COMPATIBLE ±50 CC reconoce únicamente la diferencia habitual entre desplazamiento real y nominal; tampoco es evidencia.</div><div class="evidence-grid">${dimCards}</div><label><span>Resumen de identidad (mín. 20 caracteres para REVIEWED)</span><textarea name="summary_note" maxlength="2000" placeholder="Por qué las fuentes permiten identificar este código exacto y qué incertidumbre permanece.">${esc(sameEvidence ? evidence.summary_note || "" : "")}</textarea></label><div class="notice"><strong>Regla de confirmación:</strong> 6/6 dimensiones completas, línea=MATCH, cero CONFLICT y al menos un MATCH no-lineal marcado explícitamente como discriminador. NOT_STATED conserva incertidumbre; nunca debe convertirse en una suposición.</div><div class="actions"><button name="action" value="DRAFT">Guardar DRAFT</button><label><input type="checkbox" name="confirm_resolution" value="YES"> Confirmo manualmente que la evidencia sustenta este código exacto.</label><button class="primary" name="action" value="REVIEWED">Confirmar REVIEWED + resolución manual</button></div></form>`)
-    : `<div class="notice">Seleccione primero un candidato de la comparación. Ningún código se elige automáticamente por score, rank, pistas o mapa de diferencias.</div>`;
+  const selectedReadOnly=discriminatorReadOnly(selectedDiscriminator,discriminatorMap);
+  const historyRows=(history||[]).map((h:any)=>`<tr><td>${dt(h.created_at)}</td><td>${esc(h.action)}</td><td>${esc(h.chosen_code||"—")}</td><td>${esc(h.evidence_complete_count??0)}/6</td><td>${esc(h.match_count??0)}</td><td>${esc(h.conflict_count??0)}</td><td>${esc(h.not_stated_count??0)}</td><td>${esc(h.discriminating_match_count??0)}</td><td class="wrap">${esc(h.summary_note||"—")}</td></tr>`).join("");
+  const saved=u.searchParams.get("saved"),cleared=u.searchParams.get("cleared"),error=u.searchParams.get("error");
+  const flash=error?`<div class="notice bad">${esc(error)}</div>`:saved?`<div class="notice ok">${saved==="reviewed"?"Evidencia REVIEWED confirmada. La referencia manual se actualizó de forma explícita.":"DRAFT guardado. No cambió la referencia Fasecolda efectiva."}</div>`:cleared?'<div class="notice ok">Resolución manual retirada. La evidencia v0.52 vigente fue invalidada y quedó en histórico.</div>':"";
+  const backSource=selectedSource?`/functions/v1/superbid-fasecolda-source-dashboard/lots/${esc(lot)}?source=${encodeURIComponent(selectedSource)}`:`/functions/v1/superbid-fasecolda-source-dashboard/lots/${esc(lot)}`;
 
-  const selectedReadOnly = discriminatorReadOnly(selectedDiscriminator, discriminatorMap);
-  const historyRows = (history || []).map((h: any) => `<tr><td>${dt(h.created_at)}</td><td>${esc(h.action)}</td><td>${esc(h.chosen_code || "—")}</td><td>${esc(h.evidence_complete_count ?? 0)}/6</td><td>${esc(h.match_count ?? 0)}</td><td>${esc(h.conflict_count ?? 0)}</td><td>${esc(h.not_stated_count ?? 0)}</td><td>${esc(h.discriminating_match_count ?? 0)}</td><td class="wrap">${esc(h.summary_note || "—")}</td></tr>`).join("");
-  const saved = u.searchParams.get("saved");
-  const cleared = u.searchParams.get("cleared");
-  const error = u.searchParams.get("error");
-  const flash = error ? `<div class="notice bad">${esc(error)}</div>` : saved ? `<div class="notice ok">${saved === "reviewed" ? "Evidencia REVIEWED confirmada. La referencia manual se actualizó de forma explícita." : "DRAFT guardado. No cambió la referencia Fasecolda efectiva."}</div>` : cleared ? '<div class="notice ok">Resolución manual retirada. La evidencia v0.52 vigente fue invalidada y quedó en histórico.</div>' : "";
-
-  return html(`SUPERBID — Lote ${lot}`, `<header class="top"><div><div class="ey">SUPERBID · v0.55</div><h1>Candidate Resolution · ${esc(lot)}</h1></div>${nav}</header><main>${flash}<div class="notice"><strong>NO BUY SIGNAL.</strong> El automático se conserva por separado. El cockpit documenta identidad humana y solo puede elevar la referencia efectiva mediante confirmación explícita y evidencia source-bound.</div><div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)} · ${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)}.</strong> Comparaciones deterministas, read-only y no persistidas. COINCIDE, COMPATIBLE, DIFIERE, dimensiones variables o tokens diferenciales no equivalen a MATCH/CONFLICT humano ni recomiendan candidato.</div><section class="metrics"><div class="metric"><span>Automático</span><strong>${esc(auto?.status || "—")}</strong></div><div class="metric"><span>Candidatos</span><strong>${esc(candidates?.length || 0)}</strong></div><div class="metric"><span>Evidencia</span><strong>${esc(evidence ? evidence.reviewed_at ? "REVIEWED" : "DRAFT" : "UNREVIEWED")}</strong></div><div class="metric"><span>Completas</span><strong>${esc(evidence?.evidence_complete_count ?? 0)}/6</strong></div><div class="metric"><span>Discriminadores</span><strong>${esc(evidence?.discriminating_match_count ?? 0)}</strong></div><div class="metric"><span>Manual</span><strong>${esc(manual?.chosen_code || "NO")}</strong></div></section><section class="panel"><div class="head"><div><h2>${esc(lotRow.title)}</h2><span class="sub">${esc([lotRow.brand, lotRow.line, lotRow.model_year, lotRow.city, lotRow.seller].filter(Boolean).join(" · "))}</span></div><div class="actions"><a class="btn" href="/functions/v1/superbid-readiness-dashboard?lot=${esc(lot)}">Readiness</a><a class="btn" href="/functions/v1/superbid-fasecolda-workbench?lot=${esc(lot)}">Workflow Fasecolda</a></div></div><div class="section"><div class="sub">Título público</div><strong>${esc(lotRow.title)}</strong><p class="sub">El título es una fuente textual, no una homologación. Campos ausentes no se infieren.</p><div class="sub" style="margin-top:10px">Pistas literales detectadas en el título</div>${hintSummary(lotRow.title)}</div></section>${discriminatorPanel}<section class="panel" style="margin-top:14px"><div class="head"><div><h2>Comparación de candidatos + pistas read-only</h2><span class="sub">Best automático ${esc(auto?.best_code||"—")} · score ${esc(auto?.best_score ?? "—")} · segundo ${esc(auto?.second_score ?? "—")}. Ningún código se elige automáticamente. Las pistas y deltas tampoco crean un nuevo score.</span></div></div><div class="section candidate-grid">${candidateCards || '<p>Sin candidatos actuales.</p>'}</div></section><div class="two" style="margin-top:14px"><section class="panel"><div class="head"><div><h2>${selectedCandidate ? `Evidencia para ${esc(selectedCandidate.code)}` : "Evidencia estructurada"}</h2><span class="sub">${selectedCandidate ? esc(selectedCandidate.description) : "Elija un código antes de documentar."}</span></div>${selectedCandidate ? `<strong>${cop(selectedCandidate.current_value_cop)}</strong>` : ""}</div><div class="section">${selectedReadOnly}${form}</div></section><section class="panel"><div class="head"><div><h2>Fuentes permitidas</h2><span class="sub">El backend acepta únicamente la URL pública del lote o anexos registrados para este mismo lot_id.</span></div></div><div class="section source-list">${sourceList}</div></section></div><section class="panel history"><div class="head"><div><h2>Histórico de evidencia</h2><span class="sub">Append-only. CLEAR y cambio de identidad invalidan el snapshot actual, no el histórico.</span></div></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Evento</th><th>Código</th><th>Completas</th><th>Match</th><th>Conflict</th><th>Not stated</th><th>Discriminadores</th><th>Resumen</th></tr></thead><tbody>${historyRows || '<tr><td colspan="9">Sin histórico v0.52.</td></tr>'}</tbody></table></div></section></main>`);
+  return html(`SUPERBID — Lote ${lot}`,`<header class="top"><div><div class="ey">SUPERBID · v0.58</div><h1>Candidate Resolution · ${esc(lot)}</h1></div>${nav}</header><main>${flash}<div class="notice"><strong>NO BUY SIGNAL.</strong> El automático se conserva por separado. El cockpit documenta identidad humana y solo puede elevar la referencia efectiva mediante confirmación explícita y evidencia source-bound.</div><div class="notice"><strong>${esc(IDENTITY_HINT_GUARDRAIL)} · ${esc(CANDIDATE_DISCRIMINATOR_GUARDRAIL)} · ${esc(HANDOFF_GUARDRAIL)}.</strong> Comparaciones deterministas y fuente en contexto son read-only. No equivalen a MATCH/CONFLICT humano ni recomiendan candidato.</div><section class="metrics"><div class="metric"><span>Automático</span><strong>${esc(auto?.status||"—")}</strong></div><div class="metric"><span>Candidatos</span><strong>${esc(candidates?.length||0)}</strong></div><div class="metric"><span>Evidencia</span><strong>${esc(evidence?evidence.reviewed_at?"REVIEWED":"DRAFT":"UNREVIEWED")}</strong></div><div class="metric"><span>Completas</span><strong>${esc(evidence?.evidence_complete_count??0)}/6</strong></div><div class="metric"><span>Discriminadores</span><strong>${esc(evidence?.discriminating_match_count??0)}</strong></div><div class="metric"><span>Manual</span><strong>${esc(manual?.chosen_code||"NO")}</strong></div></section><section class="panel"><div class="head"><div><h2>${esc(lotRow.title)}</h2><span class="sub">${esc([lotRow.brand,lotRow.line,lotRow.model_year,lotRow.city,lotRow.seller].filter(Boolean).join(" · "))}</span></div><div class="actions"><a class="btn" href="${backSource}">Source Research</a><a class="btn" href="/functions/v1/superbid-readiness-dashboard?lot=${esc(lot)}">Readiness</a><a class="btn" href="/functions/v1/superbid-fasecolda-workbench?lot=${esc(lot)}">Workflow Fasecolda</a></div></div><div class="section"><div class="sub">Título público</div><strong>${esc(lotRow.title)}</strong><p class="sub">El título es una fuente textual, no una homologación. Campos ausentes no se infieren.</p><div class="sub" style="margin-top:10px">Pistas literales detectadas en el título</div>${hintSummary(lotRow.title)}</div></section>${discriminatorPanel}<section class="panel" style="margin-top:14px"><div class="head"><div><h2>Comparación de candidatos + pistas read-only</h2><span class="sub">Best automático ${esc(auto?.best_code||"—")} · score ${esc(auto?.best_score??"—")} · segundo ${esc(auto?.second_score??"—")}. Ningún código se elige automáticamente.</span></div></div><div class="section candidate-grid">${candidateCards||'<p>Sin candidatos actuales.</p>'}</div></section><div class="two" style="margin-top:14px"><section class="panel"><div class="head"><div><h2>${selectedCandidate?`Evidencia para ${esc(selectedCandidate.code)}`:"Evidencia estructurada"}</h2><span class="sub">${selectedCandidate?esc(selectedCandidate.description):"Elija un código antes de documentar."}</span></div>${selectedCandidate?`<strong>${cop(selectedCandidate.current_value_cop)}</strong>`:""}</div><div class="section">${selectedReadOnly}${form}</div></section><section class="panel"><div class="head"><div><h2>Fuente en contexto + fuentes permitidas</h2><span class="sub">El viewer acepta únicamente la URL pública del lote o anexos registrados del mismo lot_id. Ver una fuente no la selecciona en ninguna dimensión.</span></div></div><div class="section"><div class="notice"><strong>${esc(HANDOFF_GUARDRAIL)}.</strong> Ningún candidato, MATCH, valor observado ni fuente de dimensión se prellena por abrir este viewer.</div>${sourceViewer}<div class="source-list">${sourceList}</div></div></section></div><section class="panel history"><div class="head"><div><h2>Histórico de evidencia</h2><span class="sub">Append-only. CLEAR y cambio de identidad invalidan el snapshot actual, no el histórico.</span></div></div><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Evento</th><th>Código</th><th>Completas</th><th>Match</th><th>Conflict</th><th>Not stated</th><th>Discriminadores</th><th>Resumen</th></tr></thead><tbody>${historyRows||'<tr><td colspan="9">Sin histórico v0.52.</td></tr>'}</tbody></table></div></section></main>`);
 }
 
-async function save(req: Request, lot: string) {
-  const f = await req.formData();
-  const code = String(f.get("code") || "").trim();
-  const action = String(f.get("action") || "DRAFT").toUpperCase();
-  const reviewed = action === "REVIEWED";
-  if (!code) return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent("Seleccione un candidato antes de guardar.")}`);
-  if (reviewed && String(f.get("confirm_resolution") || "") !== "YES") return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}&error=${encodeURIComponent("Debe confirmar explícitamente la resolución manual.")}`);
-  const dimensions: any = {};
-  for (const [key] of DIMS) dimensions[key]={status:String(f.get(`${key}__status`)||"").trim(),observed_value:String(f.get(`${key}__observed_value`)||"").trim(),source_url:String(f.get(`${key}__source_url`)||"").trim(),evidence_note:String(f.get(`${key}__evidence_note`)||"").trim(),discriminating:String(f.get(`${key}__discriminating`)||"")==="YES"};
-  const r = await db("/rest/v1/rpc/dashboard_save_fasecolda_candidate_resolution", { method: "POST", body: JSON.stringify({ p_external_lot_id: lot, p_code: code, p_dimensions:dimensions, p_summary_note: String(f.get("summary_note") || "").trim(), p_mark_reviewed:reviewed }) });
-  if (!r.ok) {
-    let msg = `No fue posible guardar (${r.status}).`;
-    try { const j = await r.json(); msg = String(j.message || j.hint || msg); } catch {}
-    return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}&error=${encodeURIComponent(msg)}`);
-  }
-  if (reviewed) return redirect(`/functions/v1/superbid-readiness-dashboard?lot=${encodeURIComponent(lot)}`);
-  return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}&saved=draft`);
+async function save(req:Request,lot:string){
+  const f=await req.formData(),code=String(f.get("code")||"").trim(),action=String(f.get("action")||"DRAFT").toUpperCase(),reviewed=action==="REVIEWED";
+  const sourceContext=safeHttpUrl(f.get("source_context"));
+  const sourceSuffix=sourceContext?`&source=${encodeURIComponent(sourceContext)}`:"";
+  if(!code)return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent("Seleccione un candidato antes de guardar.")}${sourceSuffix}`);
+  if(reviewed&&String(f.get("confirm_resolution")||"")!=="YES")return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}${sourceSuffix}&error=${encodeURIComponent("Debe confirmar explícitamente la resolución manual.")}`);
+  const dimensions:any={};for(const [key] of DIMS)dimensions[key]={status:String(f.get(`${key}__status`)||"").trim(),observed_value:String(f.get(`${key}__observed_value`)||"").trim(),source_url:String(f.get(`${key}__source_url`)||"").trim(),evidence_note:String(f.get(`${key}__evidence_note`)||"").trim(),discriminating:String(f.get(`${key}__discriminating`)||"")==="YES"};
+  const r=await db("/rest/v1/rpc/dashboard_save_fasecolda_candidate_resolution",{method:"POST",body:JSON.stringify({p_external_lot_id:lot,p_code:code,p_dimensions:dimensions,p_summary_note:String(f.get("summary_note")||"").trim(),p_mark_reviewed:reviewed})});
+  if(!r.ok){let msg=`No fue posible guardar (${r.status}).`;try{const j=await r.json();msg=String(j.message||j.hint||msg);}catch{}return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}${sourceSuffix}&error=${encodeURIComponent(msg)}`);}
+  if(reviewed)return redirect(`/functions/v1/superbid-readiness-dashboard?lot=${encodeURIComponent(lot)}`);
+  return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?candidate=${encodeURIComponent(code)}${sourceSuffix}&saved=draft`);
 }
 
-async function clearResolution(req: Request, lot: string) {
-  const f = await req.formData();
-  if (String(f.get("confirm_clear") || "") !== "YES") return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent("Debe confirmar explícitamente el CLEAR.")}`);
-  const r = await db("/rest/v1/rpc/dashboard_clear_fasecolda_candidate_resolution_v52", { method: "POST", body: JSON.stringify({ p_external_lot_id: lot, p_note: String(f.get("note") || "").trim() }) });
-  if (!r.ok) {
-    let msg = `No fue posible hacer CLEAR (${r.status}).`;
-    try { const j = await r.json(); msg = String(j.message || j.hint || msg); } catch {}
-    return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent(msg)}`);
-  }
-  return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?cleared=1`);
+async function clearResolution(req:Request,lot:string){
+  const f=await req.formData(),sourceContext=safeHttpUrl(f.get("source_context")),sourceSuffix=sourceContext?`&source=${encodeURIComponent(sourceContext)}`:"";
+  if(String(f.get("confirm_clear")||"")!=="YES")return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent("Debe confirmar explícitamente el CLEAR.")}${sourceSuffix}`);
+  const r=await db("/rest/v1/rpc/dashboard_clear_fasecolda_candidate_resolution_v52",{method:"POST",body:JSON.stringify({p_external_lot_id:lot,p_note:String(f.get("note")||"").trim()})});
+  if(!r.ok){let msg=`No fue posible hacer CLEAR (${r.status}).`;try{const j=await r.json();msg=String(j.message||j.hint||msg);}catch{}return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?error=${encodeURIComponent(msg)}${sourceSuffix}`);}
+  return redirect(`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}?cleared=1${sourceSuffix}`);
 }
 
-Deno.serve(async (req: Request) => {
-  try {
-    const p = pathOf(req);
-    const u = new URL(req.url);
-    const requestedLot=lotFromPath(p)||safeLot(u.searchParams.get("lot"));
-    if (p === "/login" && req.method === "POST") {
-      const f = await req.formData();
-      const password = String(f.get("password") || "");
-      const lot = safeLot(f.get("lot"));
-      if (!await valid(password)) return login(true, lot);
-      const target = lot ? `/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}` : "/functions/v1/superbid-fasecolda-candidate-cockpit";
-      return redirect(target, { "set-cookie": `${COOKIE}=${encodeURIComponent(password)}; Path=/functions/v1/superbid-fasecolda-candidate-cockpit; HttpOnly; Secure; SameSite=Strict; Max-Age=28800` });
+Deno.serve(async(req:Request)=>{
+  try{
+    const p=pathOf(req),u=new URL(req.url),requestedLot=lotFromPath(p)||safeLot(u.searchParams.get("lot")),requestedSource=safeHttpUrl(u.searchParams.get("source"));
+    if(p==="/login"&&req.method==="POST"){
+      const f=await req.formData(),password=String(f.get("password")||""),lot=safeLot(f.get("lot")),source=safeHttpUrl(f.get("source"));
+      if(!await valid(password))return login(true,lot,source);
+      const target=lot?`/functions/v1/superbid-fasecolda-candidate-cockpit/lots/${encodeURIComponent(lot)}${source?`?source=${encodeURIComponent(source)}`:""}`:"/functions/v1/superbid-fasecolda-candidate-cockpit";
+      return redirect(target,{"set-cookie":`${COOKIE}=${encodeURIComponent(password)}; Path=/functions/v1/superbid-fasecolda-candidate-cockpit; HttpOnly; Secure; SameSite=Strict; Max-Age=28800`});
     }
-    const token = cookie(req);
-    if (!await valid(token)) return login(false, requestedLot);
-    if (p === "/logout" && req.method === "POST") return redirect("/functions/v1/superbid-fasecolda-candidate-cockpit", { "set-cookie": `${COOKIE}=; Path=/functions/v1/superbid-fasecolda-candidate-cockpit; HttpOnly; Secure; SameSite=Strict; Max-Age=0` });
-    const lot = lotFromPath(p);
-    if (lot && p.endsWith("/save") && req.method === "POST") return save(req, lot);
-    if (lot && p.endsWith("/clear") && req.method === "POST") return clearResolution(req, lot);
-    if (lot && req.method === "GET") return detail(req, lot);
-    if ((p === "/" || p === "") && req.method === "GET") return board(req);
-    return html("No encontrado", "<main>Ruta no encontrada.</main>", 404);
-  } catch (e) {
-    return html("Error", `<main><div class="notice bad">Error interno del cockpit. ${esc(e instanceof Error ? e.message : String(e))}</div></main>`, 500);
-  }
+    const token=cookie(req);if(!await valid(token))return login(false,requestedLot,requestedSource);
+    if(p==="/logout"&&req.method==="POST")return redirect("/functions/v1/superbid-fasecolda-candidate-cockpit",{"set-cookie":`${COOKIE}=; Path=/functions/v1/superbid-fasecolda-candidate-cockpit; HttpOnly; Secure; SameSite=Strict; Max-Age=0`});
+    const lot=lotFromPath(p);
+    if(lot&&p.endsWith("/save")&&req.method==="POST")return save(req,lot);
+    if(lot&&p.endsWith("/clear")&&req.method==="POST")return clearResolution(req,lot);
+    if(lot&&req.method==="GET")return detail(req,lot);
+    if((p==="/"||p==="")&&req.method==="GET")return board(req);
+    return html("No encontrado","<main>Ruta no encontrada.</main>",404);
+  }catch(e){return html("Error",`<main><div class="notice bad">Error interno del cockpit. ${esc(e instanceof Error?e.message:String(e))}</div></main>`,500);}
 });
