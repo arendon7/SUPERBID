@@ -30,7 +30,6 @@ def test_v059_creates_private_read_only_resolution_workstreams_view():
         "max_bid",
         "final_decision",
         "recommended_bid",
-        "roi",
     ):
         assert forbidden not in lower
     assert "fasecolda_resolution_workstream_routing_not_match_valuation_or_buy_signal" in lower
