@@ -108,7 +108,7 @@ def test_v055_business_write_authority_does_not_expand():
 def test_v055_no_new_data_query_is_needed_for_discriminator_map():
     lower = COCKPIT.lower()
     detail = lower[lower.index("async function detail"):lower.index("async function save")]
-    assert "buildcandidatediscriminatormap((candidates || []).map" in detail
+    assert re.search(r"buildcandidatediscriminatormap\(\(candidates\s*\|\|\s*\[\]\)\.map", detail)
     assert "candidate_discriminator" not in "\n".join(
         line for line in detail.splitlines() if "/rest/v1/" in line
     )
