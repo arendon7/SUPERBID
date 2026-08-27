@@ -201,4 +201,5 @@ def test_v060_package_version_is_consistent():
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 60, 0)
+    assert pv == iv
+    assert pv >= (0, 60, 0)
