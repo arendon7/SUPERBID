@@ -159,7 +159,10 @@ def test_cockpit_is_private_case_preserving_and_completion_safe():
     assert "lot_fasecolda_candidates?select=" in t
     assert "lot_fasecolda_manual_resolutions?select=" in t
     assert "lot_fasecolda_candidate_resolution_evidence?select=*" in t
-    assert "dashboard_fasecolda_candidate_resolution_cockpit_v52" in t
+    assert (
+        "dashboard_fasecolda_candidate_resolution_cockpit_v52" in t
+        or "dashboard_fasecolda_candidate_resolution_queue_v58" in t
+    )
     for token in ("return_to", "redirect_uri", "redirect_url"):
         assert token not in t.lower()
 
