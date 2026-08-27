@@ -141,9 +141,10 @@ def test_v059_guardrails_make_routing_non_economic_and_non_match():
     assert "no modifica puja máxima ni decisión de compra" in lower
 
 
-def test_v059_package_version_is_consistent():
+def test_v059_package_version_is_forward_compatible():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 59, 0)
+    assert pv == iv
+    assert pv >= (0, 59, 0)
