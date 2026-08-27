@@ -117,10 +117,12 @@ def test_v058_source_context_never_prefills_candidate_or_dimension_evidence():
     selected_expr = re.search(r"const requested=.*?const selectedcandidate", lower, re.S)
     assert selected_expr
     assert "source" not in selected_expr.group(0)
-    assert "sourceoptions(sources, src)" in lower
-    assert "sourceoptions(sources, selectedsource)" not in lower
+    assert re.search(r"sourceoptions\(sources,\s*src\)", lower)
+    assert not re.search(r"sourceoptions\(sources,\s*selectedsource\)", lower)
     assert "statusoptions(st)" in lower
-    assert "selectedsource" not in re.search(r"function statusoptions.*?function sourceoptions", lower, re.S).group(0)
+    status_source_helpers = re.search(r"function statusoptions.*?function sourceoptions", lower, re.S)
+    assert status_source_helpers
+    assert "selectedsource" not in status_source_helpers.group(0)
     assert "ningún candidato, match, valor observado ni fuente de dimensión se prellena" in lower
 
 
