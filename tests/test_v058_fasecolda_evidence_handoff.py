@@ -163,9 +163,10 @@ def test_v058_still_forbids_automatic_document_inference_and_economic_authority(
         assert forbidden not in combined
 
 
-def test_v058_package_version_is_consistent():
+def test_v058_package_version_is_consistent_and_forward_compatible():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package = (ROOT / "src/superbid_collector/__init__.py").read_text(encoding="utf-8")
     pv = version_tuple(pyproject, r'version\s*=\s*"(\d+\.\d+\.\d+)"')
     iv = version_tuple(package, r'__version__\s*=\s*"(\d+\.\d+\.\d+)"')
-    assert pv == iv == (0, 58, 0)
+    assert pv == iv
+    assert pv >= (0, 58, 0)

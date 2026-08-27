@@ -33,13 +33,17 @@ def test_readiness_routes_valuation_and_shortcut_to_exact_workbench_lot():
     assert "CASE_CONTEXT_ROUTING_NOT_BUY_SIGNAL" in READINESS
 
 
-def test_workbench_keeps_exact_lot_for_every_child_workflow():
+def test_workbench_keeps_exact_lot_for_every_active_child_workflow():
     assert "external_lot_id=eq.${encodeURIComponent(lot)}" in WORKBENCH
-    assert "superbid-fasecolda-dashboard?lot=${id}" in WORKBENCH
+    # Candidate authority moved from the legacy resolver to the completion-safe cockpit in v0.52.
+    assert "superbid-fasecolda-candidate-cockpit/lots/${id}" in WORKBENCH
+    # All Source workstreams preserve exact lot through the path segment.
+    assert "superbid-fasecolda-source-dashboard/lots/${id}" in WORKBENCH
     assert "superbid-fasecolda-search-dashboard?lot=${id}" in WORKBENCH
     assert "superbid-fasecolda-year-dashboard?lot=${id}" in WORKBENCH
-    assert "superbid-fasecolda-evidence-dashboard?lot=${id}" in WORKBENCH
-    assert "superbid-readiness-dashboard?lot=${id}" in WORKBENCH
+    # Evidence lifecycle is reached through the specialized Year/Lifecycle navigation in v0.59.
+    assert "superbid-fasecolda-evidence-dashboard" in WORKBENCH
+    assert "superbid-readiness-dashboard?lot=${esc(x.external_lot_id)}" in WORKBENCH
 
 
 def test_legacy_resolver_preserves_exact_lot_but_has_no_write_authority():
